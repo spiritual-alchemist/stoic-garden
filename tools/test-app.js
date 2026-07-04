@@ -1,22 +1,21 @@
-// End-to-end smoke test with a tiny DOM shim: loads the real app scripts and
-// simulates tap -> type -> save -> remove, asserting persistence and UI updates.
+// End-to-end smoke test with a DOM shim: loads the real scripts, drives the composer
+// (add item, weight, subtasks, outcome), then checks persistence and the garden state.
 const fs = require('fs');
 const path = require('path');
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
 
-// ---- minimal DOM ----
 const ctxStub = new Proxy({ fillRect() {}, drawImage() {}, clearRect() {}, imageSmoothingEnabled: false, fillStyle: '' }, { get: (t, k) => (k in t ? t[k] : () => {}) });
 function Elem(tag) {
   const style = { setProperty(k, v) { this[k] = v; } };
-  return {
-    tagName: tag, children: [], _text: '', _cls: '', value: '', attributes: {}, style,
-    clientWidth: 660, width: 0, height: 0,
-    classList: { _s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, contains(c) { return this._s.has(c); } },
+  const e = {
+    tagName: tag, children: [], _text: '', _cls: '', value: '', checked: false, disabled: false,
+    attributes: {}, dataset: {}, style, clientWidth: 660, width: 0, height: 0, title: '', type: '',
+    classList: { _s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, toggle(c, on) { on ? this._s.add(c) : this._s.delete(c); }, contains(c) { return this._s.has(c); } },
+    _l: {},
     get className() { return this._cls; },
     set className(v) { this._cls = String(v); this.classList._s = new Set(String(v).split(/\s+/).filter(Boolean)); },
-    _l: {},
     set textContent(v) { this._text = String(v); this.children = []; },
     get textContent() { return this._text; },
     set innerHTML(v) { this._html = v; if (v === '') this.children = []; },
@@ -24,20 +23,27 @@ function Elem(tag) {
     appendChild(c) { this.children.push(c); c.parentNode = this; return c; },
     removeChild(c) { this.children = this.children.filter(x => x !== c); },
     remove() {},
-    setAttribute(k, v) { this.attributes[k] = v; },
-    getAttribute(k) { return this.attributes[k]; },
+    setAttribute(k, v) { this.attributes[k] = v; }, getAttribute(k) { return this.attributes[k]; },
     addEventListener(ev, fn) { (this._l[ev] = this._l[ev] || []).push(fn); },
     dispatch(ev, arg) { (this._l[ev] || []).forEach(f => f(arg || {})); },
-    click() { this.dispatch('click', {}); },
+    click() { this.dispatch('click', { target: this }); },
     focus() {}, getContext() { return ctxStub; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 660, height: 400 }; },
-    querySelector() { return null; },
+    closest(sel) { let n = this; while (n) { if (sel === 'button' && n.tagName === 'button') return n; n = n.parentNode; } return null; },
+    querySelector(sel) { const all = this.querySelectorAll(sel); return all[0] || null; },
+    querySelectorAll(sel) { const out = []; const tag = sel.replace('.', ''); (function rec(n) { for (const c of n.children) { if ((sel[0] === '.' && c.classList.contains(tag)) || c.tagName === sel) out.push(c); rec(c); } })(this); return out; },
   };
+  return e;
 }
-const IDS = ['date', 'question', 'epigraph', 'garden', 'beds', 'today', 'mirror', 'echo',
-  'export', 'import', 'importFile', 'reset', 'overlay', 'composerClose', 'composerSave',
-  'composerTitle', 'composerGreek', 'composerPrompt', 'composerNote'];
+const IDS = ['garden', 'epigraph', 'mirror', 'dayPrev', 'dayNext', 'dayLabel', 'items', 'addItem',
+  'export', 'import', 'importFile', 'overlay', 'cClose', 'cHeading', 'cTitle', 'cDesc', 'cPillar',
+  'cWeight', 'cOutcome', 'cSubList', 'cSubInput', 'cSubAdd', 'cSave', 'cDelete'];
 const byId = {}; IDS.forEach(id => byId[id] = Elem('div'));
+// static composer seg buttons (as in index.html)
+function seg(parent, key, val, label) { const b = Elem('button'); b.dataset[key] = val; b.textContent = label; parent.appendChild(b); }
+['light', 'notable', 'pivotal'].forEach(w => seg(byId.cWeight, 'w', w, w));
+['open', 'met', 'fell_short'].forEach(o => seg(byId.cOutcome, 'o', o, o));
+
 const docL = {};
 global.document = {
   createElement: t => Elem(t),
@@ -50,59 +56,76 @@ let rafCount = 0;
 global.requestAnimationFrame = cb => { if (rafCount++ < 2) cb(0); };
 global.window = { addEventListener() {}, matchMedia: () => ({ matches: false }) };
 global.navigator = { vibrate() {} };
-global.setTimeout = (fn) => { try { fn(); } catch (_) {} return 0; };
+global.setTimeout = fn => { try { fn(); } catch (_) {} return 0; };
 global.clearTimeout = () => {};
 global.alert = () => {}; global.confirm = () => true;
 const mem = {};
 global.localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
 global.location = { origin: 'http://localhost' };
 
-// ---- load the real scripts as one shared scope (as the browser does) ----
 const combined = ['data.js', 'store.js', 'garden.js', 'app.js']
-  .map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8'))
-  .join('\n;\n') + '\n;globalThis.gardenState = gardenState;';
+  .map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')).join('\n;\n') + '\n;globalThis.gardenState = gardenState;';
 new Function(combined)();
 
-// ---- run ----
+function pillarState(key) { return gardenState(JSON.parse(mem['stoic-garden-v2']).items).find(g => g.key === key); }
+
 try {
-  document._fire('DOMContentLoaded'); // triggers init()
-  ok(byId.beds.children.length === 4, 'init renders 4 beds');
-  ok(byId.question._text.length > 0, 'daily question set');
-  ok(byId.epigraph.innerHTML.includes('—'), 'epigraph rendered');
+  document._fire('DOMContentLoaded');
+  ok(byId.cPillar.children.length === 4, 'pillar dropdown populated with 4 options');
+  ok(byId.items.children.length === 1 && byId.items.children[0].classList.contains('items-empty'), 'starts with empty state');
 
-  // tap the first bed (wisdom) -> composer opens
-  byId.beds.children[0].click();
-  ok(byId.overlay.classList.contains('open'), 'tapping a bed opens the composer');
-  ok(byId.composerTitle._text === 'Wisdom', 'composer titled with tapped virtue');
+  // add an OPEN pivotal courage item with two subtasks
+  byId.addItem.click();
+  ok(byId.overlay.classList.contains('open'), 'add opens composer');
+  byId.cTitle.value = 'Finish the hard PR';
+  byId.cPillar.value = 'courage';
+  byId.cWeight.dispatch('click', { target: byId.cWeight.children[2] }); // pivotal
+  byId.cSubInput.value = 'read the diff'; byId.cSubAdd.click();
+  byId.cSubInput.value = 'write comments'; byId.cSubAdd.click();
+  ok(byId.cSubList.children.length === 2, 'two subtasks added in composer');
+  byId.cSave.click();
 
-  // type a note and save
-  byId.composerNote.value = 'let the driver merge';
-  byId.composerSave.click();
+  let items = JSON.parse(mem['stoic-garden-v2']).items;
+  ok(items.length === 1, 'one item saved');
+  ok(items[0].pillar === 'courage' && items[0].weight === 'pivotal' && items[0].outcome === 'open', 'saved with right pillar/weight/outcome');
+  ok(items[0].subtasks.length === 2, 'subtasks persisted');
+  ok(pillarState('courage').points === 0, 'open item with no ticks -> 0 growth');
 
-  const saved = JSON.parse(mem['stoic-garden-v1']);
-  ok(saved.entries.length === 1, 'saving plants one entry');
-  ok(saved.entries[0].virtue === 'wisdom' && saved.entries[0].note === 'let the driver merge', 'entry has right virtue + note');
-  ok(!byId.overlay.classList.contains('open'), 'composer closes after save');
+  // tick one subtask -> partial growth (pivotal=3, 1/2 done -> 1.5)
+  const card = byId.items.children.find(c => c.classList.contains('item'));
+  const firstCb = card.querySelectorAll('input')[0];
+  firstCb.dispatch('change');
+  ok(Math.abs(pillarState('courage').points - 1.5) < 1e-6, 'ticking 1 of 2 subtasks -> half of pivotal growth (1.5)');
 
-  // today's list shows the log
-  const hasLog = byId.today.children.some(c => c.classList.contains('log'));
-  ok(hasLog, "today's list shows the planting");
+  // mark it MET -> full pivotal growth (3)
+  const seg = card.querySelectorAll('.seg-btn');
+  const metBtn = seg.find(b => b._text === 'Met it');
+  metBtn.click();
+  ok(pillarState('courage').points === 3, 'marking met -> full pivotal points (3)');
+  ok(pillarState('courage').health === 1, 'met item does not wilt');
 
-  // remove it
-  const log = byId.today.children.find(c => c.classList.contains('log'));
-  const del = log.children.find(c => c.className === 'log-del');
-  del.click();
-  ok(JSON.parse(mem['stoic-garden-v1']).entries.length === 0, 'removing a log deletes the entry');
+  // add a fell-short notable justice item -> justice wilts, no growth
+  byId.addItem.click();
+  byId.cTitle.value = 'snapped at a teammate';
+  byId.cPillar.value = 'justice';
+  byId.cWeight.dispatch('click', { target: byId.cWeight.children[1] }); // notable
+  byId.cOutcome.dispatch('click', { target: byId.cOutcome.children[2] }); // fell_short
+  byId.cSave.click();
+  ok(pillarState('justice').points === 0, 'fell-short gives no growth');
+  ok(Math.abs(pillarState('justice').health - 0.6) < 1e-6, 'fresh notable fell-short wilts justice to 0.6 health');
 
-  // log enough evidence to root a virtue, verify state flips to rooted
-  const st = JSON.parse(mem['stoic-garden-v1']);
-  for (let i = 0; i < 10; i++) st.entries.push({ id: 'x' + i, date: '2026-06-' + String(20 - i).padStart(2, '0'), virtue: 'courage', note: '', ts: 0 });
-  mem['stoic-garden-v1'] = JSON.stringify(st);
-  const gs = gardenState(st.entries);
-  const courage = gs.find(g => g.key === 'courage');
-  ok(courage.rooted && courage.stage === 'rooted', '10 evidence days -> courage is a rooted perennial');
+  // day navigation: go back a day, list is that day (empty), cannot go past today
+  byId.dayPrev.click();
+  ok(byId.dayNext.disabled === false, 'after going back, next-day is enabled');
+  byId.dayNext.click();
+  ok(byId.dayNext.disabled === true, 'back at today, next-day disabled');
+
+  // delete the courage item
+  const cCard = byId.items.children.find(c => c.classList.contains('item'));
+  cCard.querySelectorAll('button').find(b => b.title === 'Delete').click();
+  ok(JSON.parse(mem['stoic-garden-v2']).items.length === 1, 'delete removes the item');
 } catch (e) {
-  fail++; console.log('  THREW:', e.message, '\n', e.stack.split('\n').slice(0, 4).join('\n'));
+  fail++; console.log('  THREW:', e.message, '\n', (e.stack || '').split('\n').slice(1, 4).join('\n'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

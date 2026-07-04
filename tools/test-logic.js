@@ -1,62 +1,54 @@
-// Deterministic tests for the growth model in data.js (no DOM needed).
+// Deterministic tests for the weighted item growth model in data.js.
 const fs = require('fs');
 const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'data.js'), 'utf8');
-const m = new Function(src + ';return {evidenceFor,stageFor,healthFor,gardenState,mirrorLine,echoFor,todayStr,ymd,ROOTED_MIN_EVIDENCE};')();
+const m = new Function(src + ';return {pointsFor,growthFraction,subtaskFraction,stageForPoints,wiltPressureFor,healthFor,gardenState,mirrorLine,todayStr,ymd,addDays};')();
 
 let pass = 0, fail = 0;
-function ok(cond, msg) { if (cond) { pass++; } else { fail++; console.log('  FAIL:', msg); } }
+const ok = (c, msg) => { if (c) pass++; else { fail++; console.log('  FAIL:', msg); } };
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+function daysAgo(n) { return m.addDays(m.todayStr(), -n); }
+function I(o) { return Object.assign({ id: Math.random().toString(36), date: daysAgo(0), title: 't', desc: '', pillar: 'wisdom', weight: 'notable', outcome: 'open', subtasks: [], resolvedDate: null }, o); }
 
-// build a date N days ago in local YMD
-function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return m.ymd(d); }
-function E(virtue, dateStr, note) { return { id: Math.random().toString(36), date: dateStr, virtue, note: note || '', ts: 0 }; }
+// growth fraction by outcome + subtasks
+ok(m.growthFraction(I({ outcome: 'met' })) === 1, 'met -> full growth');
+ok(m.growthFraction(I({ outcome: 'fell_short' })) === 0, 'fell short -> no growth');
+ok(near(m.growthFraction(I({ outcome: 'open', subtasks: [{ done: true }, { done: false }, { done: false }, { done: false }] })), 0.25), 'open with 1/4 subtasks -> quarter growth');
 
-// evidence counts DISTINCT days, not raw entries
+// weighted points
 {
-  const es = [E('courage', daysAgo(0)), E('courage', daysAgo(0)), E('courage', daysAgo(1))];
-  ok(m.evidenceFor(es, 'courage') === 2, 'two entries same day count as one evidence day');
+  const items = [I({ pillar: 'courage', weight: 'pivotal', outcome: 'met' }), I({ pillar: 'courage', weight: 'light', outcome: 'met' }), I({ pillar: 'courage', weight: 'notable', outcome: 'fell_short' })];
+  ok(m.pointsFor(items, 'courage') === 4, 'pivotal(3) + light(1) met, fell-short adds 0 -> 4 points');
 }
 
-// stage thresholds
+// stage thresholds on points
+ok(m.stageForPoints(0).name === 'seed' && m.stageForPoints(1).name === 'sprout' && m.stageForPoints(4).name === 'young' && m.stageForPoints(9).name === 'flowering' && m.stageForPoints(16).name === 'rooted', 'stage thresholds by points');
+
+// wilt: weighted, decays with age, rooted has a floor
 {
-  ok(m.stageFor(0).name === 'seed', 'stage 0 -> seed');
-  ok(m.stageFor(1).name === 'sprout', 'stage 1 -> sprout');
-  ok(m.stageFor(3).name === 'young', 'stage 3 -> young');
-  ok(m.stageFor(6).name === 'flowering', 'stage 6 -> flowering');
-  ok(m.stageFor(10).name === 'rooted', 'stage 10 -> rooted');
-  ok(m.stageFor(50).name === 'rooted', 'stage 50 -> rooted');
+  const fresh = [I({ pillar: 'justice', weight: 'notable', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
+  ok(near(m.healthFor(0, m.wiltPressureFor(fresh, 'justice')), 0.6), 'fresh notable fell-short -> health 0.6');
+  const piv = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
+  ok(near(m.healthFor(0, m.wiltPressureFor(piv, 'justice')), 0.4), 'fresh pivotal fell-short -> health 0.4 (bigger weight hurts more)');
+  const old = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(10) })];
+  ok(m.healthFor(0, m.wiltPressureFor(old, 'justice')) === 1, 'fell-short fully faded after the wilt window');
+  const rooted = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
+  ok(m.healthFor(16, m.wiltPressureFor(rooted, 'justice')) === 0.5, 'rooted plant resists: health floored at 0.5');
 }
 
-// health: logged today = full; neglected young wilts; rooted survives
+// gardenState + mirror
 {
-  const fresh = [E('wisdom', daysAgo(0)), E('wisdom', daysAgo(1)), E('wisdom', daysAgo(2))];
-  ok(m.healthFor(fresh, 'wisdom') === 1, 'logged today -> full health');
-
-  const neglected = [];
-  for (let i = 0; i < 4; i++) neglected.push(E('justice', daysAgo(20 + i))); // 4 evidence, last 20 days ago
-  const h = m.healthFor(neglected, 'justice');
-  ok(h < 0.2, 'young + 20 days neglect -> nearly wilted (' + h.toFixed(2) + ')');
-
-  const rooted = [];
-  for (let i = 0; i < m.ROOTED_MIN_EVIDENCE; i++) rooted.push(E('temperance', daysAgo(30 + i))); // rooted, long neglect
-  ok(m.healthFor(rooted, 'temperance') === 1, 'rooted survives long neglect (trait, not streak)');
-}
-
-// mirror line points at the asymmetry (all virtues present, courage most / temperance least)
-{
-  const es = [];
-  const plan = { courage: 5, wisdom: 3, justice: 2, temperance: 1 };
-  for (const [v, n] of Object.entries(plan)) for (let i = 0; i < n; i++) es.push(E(v, daysAgo(i)));
-  const gs = m.gardenState(es);
+  const items = [];
+  for (let i = 0; i < 6; i++) items.push(I({ pillar: 'courage', weight: 'pivotal', outcome: 'met', resolvedDate: daysAgo(i) })); // 18 pts -> rooted
+  items.push(I({ pillar: 'wisdom', weight: 'notable', outcome: 'met' }), I({ pillar: 'wisdom', weight: 'notable', outcome: 'met' })); // 4
+  items.push(I({ pillar: 'justice', weight: 'notable', outcome: 'met' })); // 2
+  items.push(I({ pillar: 'temperance', weight: 'light', outcome: 'met' })); // 1 -> least
+  const gs = m.gardenState(items);
+  const c = gs.find(g => g.key === 'courage'), t = gs.find(g => g.key === 'temperance');
+  ok(c.rooted && c.stage === 'rooted', '18 points -> courage rooted');
+  ok(t.stage === 'sprout', '1 point -> temperance sprouting');
   const line = m.mirrorLine(gs);
-  ok(line && /courage/i.test(line) && /temperance/i.test(line), 'mirror names most- and least-lived: "' + line + '"');
-}
-
-// echo resurfaces a past note, never today's
-{
-  const es = [E('wisdom', daysAgo(9), 'let the driver merge'), E('courage', daysAgo(0), 'today line')];
-  const e = m.echoFor(es);
-  ok(e && e.date === daysAgo(9) && e.note === 'let the driver merge', 'echo returns a past note, not today');
+  ok(line && /courage/i.test(line) && /temperance/i.test(line), 'mirror names most-grown and least: "' + line + '"');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

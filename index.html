@@ -15,41 +15,72 @@
 <body>
   <main class="app">
     <header class="head">
-      <p id="date" class="date"></p>
-      <h1 id="question" class="question"></h1>
+      <p id="epigraph" class="epigraph"></p>
     </header>
 
     <canvas id="garden" class="garden" aria-label="Your garden of the four virtues"></canvas>
 
-    <section id="beds" class="beds" aria-label="The four virtues"></section>
-
-    <section id="today" class="today"></section>
-
     <section id="mirror" class="mirror"></section>
 
-    <section id="echo" class="echo"></section>
+    <section class="day">
+      <div class="day-nav">
+        <button id="dayPrev" class="nav-btn" aria-label="Previous day">‹</button>
+        <span id="dayLabel" class="day-label"></span>
+        <button id="dayNext" class="nav-btn" aria-label="Next day">›</button>
+      </div>
+      <div id="items" class="items"></div>
+      <button id="addItem" class="add-item">+ Add item</button>
+    </section>
 
     <footer class="foot">
-      <p id="epigraph" class="epigraph"></p>
       <div class="menu">
         <button id="export" class="menu-btn">Export</button>
         <button id="import" class="menu-btn">Import</button>
-        <button id="reset" class="menu-btn danger">Clear</button>
         <input id="importFile" type="file" accept="application/json" hidden>
       </div>
-      <p class="tiny">Your garden lives only on this device. Evidence, not effort — a quiet room, once a day.</p>
+      <p class="tiny">Grows from what you meet, wilts only from what you mark fell short. Lives on this device.</p>
     </footer>
   </main>
 
   <div id="overlay" class="overlay">
     <div class="composer" role="dialog" aria-modal="true">
-      <button id="composerClose" class="composer-close" aria-label="Close">×</button>
-      <h2 id="composerTitle" class="composer-title"></h2>
-      <p id="composerGreek" class="composer-greek"></p>
-      <p id="composerPrompt" class="composer-prompt"></p>
-      <textarea id="composerNote" class="composer-note" rows="2" placeholder="One line of what happened (optional)"></textarea>
-      <button id="composerSave" class="composer-save">Plant it</button>
-      <p class="composer-hint">Tapping nothing is allowed. Only log where the virtue actually showed up.</p>
+      <button id="cClose" class="composer-close" aria-label="Close">×</button>
+      <h2 id="cHeading" class="composer-title">New item</h2>
+
+      <label class="field-label" for="cTitle">Title</label>
+      <input id="cTitle" class="field" placeholder="Finish the hard PR review">
+
+      <label class="field-label" for="cDesc">Description — impact, what it meant</label>
+      <textarea id="cDesc" class="field" rows="2" placeholder="Why it matters, what it cost or built (optional)"></textarea>
+
+      <label class="field-label" for="cPillar">Pillar</label>
+      <select id="cPillar" class="field"></select>
+
+      <label class="field-label">Weight</label>
+      <div id="cWeight" class="seg">
+        <button class="seg-btn" data-w="light">Light</button>
+        <button class="seg-btn" data-w="notable">Notable</button>
+        <button class="seg-btn" data-w="pivotal">Pivotal</button>
+      </div>
+
+      <label class="field-label">Subtasks — progress on any counts</label>
+      <div id="cSubList" class="csub-list"></div>
+      <div class="csub-add">
+        <input id="cSubInput" class="field" placeholder="Add a step, press enter">
+        <button id="cSubAdd" class="menu-btn">Add</button>
+      </div>
+
+      <label class="field-label">Outcome</label>
+      <div id="cOutcome" class="seg">
+        <button class="seg-btn" data-o="open">Open</button>
+        <button class="seg-btn" data-o="met">Met it</button>
+        <button class="seg-btn" data-o="fell_short">Fell short</button>
+      </div>
+
+      <div class="composer-actions">
+        <button id="cDelete" class="menu-btn danger">Delete</button>
+        <button id="cSave" class="composer-save">Save</button>
+      </div>
     </div>
   </div>
 
