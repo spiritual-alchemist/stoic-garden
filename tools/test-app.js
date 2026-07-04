@@ -25,7 +25,7 @@ function Elem(tag) {
     remove() {},
     setAttribute(k, v) { this.attributes[k] = v; }, getAttribute(k) { return this.attributes[k]; },
     addEventListener(ev, fn) { (this._l[ev] = this._l[ev] || []).push(fn); },
-    dispatch(ev, arg) { (this._l[ev] || []).forEach(f => f(arg || {})); },
+    dispatch(ev, arg) { arg = arg || {}; if (!arg.stopPropagation) arg.stopPropagation = () => {}; if (!('target' in arg)) arg.target = this; (this._l[ev] || []).forEach(f => f(arg)); },
     click() { this.dispatch('click', { target: this }); },
     focus() {}, getContext() { return ctxStub; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 660, height: 400 }; },
@@ -97,9 +97,8 @@ try {
   firstCb.dispatch('change');
   ok(Math.abs(pillarState('courage').points - 1.5) < 1e-6, 'ticking 1 of 2 subtasks -> half of pivotal growth (1.5)');
 
-  // mark it MET -> full pivotal growth (3)
-  const seg = card.querySelectorAll('.seg-btn');
-  const metBtn = seg.find(b => b._text === 'Met it');
+  // mark it MET via the compact toggle -> full pivotal growth (3)
+  const metBtn = card.querySelectorAll('.otog').find(b => b.classList.contains('o-met'));
   metBtn.click();
   ok(pillarState('courage').points === 3, 'marking met -> full pivotal points (3)');
   ok(pillarState('courage').health === 1, 'met item does not wilt');
@@ -112,7 +111,7 @@ try {
   byId.cOutcome.dispatch('click', { target: byId.cOutcome.children[2] }); // fell_short
   byId.cSave.click();
   ok(pillarState('justice').points === 0, 'fell-short gives no growth');
-  ok(Math.abs(pillarState('justice').health - 0.6) < 1e-6, 'fresh notable fell-short wilts justice to 0.6 health');
+  ok(Math.abs(pillarState('justice').health - 1 / 3) < 1e-6, 'fresh notable fell-short on ungrown justice -> health 0.33');
 
   // day navigation: go back a day, list is that day (empty), cannot go past today
   byId.dayPrev.click();
@@ -120,10 +119,12 @@ try {
   byId.dayNext.click();
   ok(byId.dayNext.disabled === true, 'back at today, next-day disabled');
 
-  // delete the courage item
-  const cCard = byId.items.children.find(c => c.classList.contains('item'));
-  cCard.querySelectorAll('button').find(b => b.title === 'Delete').click();
-  ok(JSON.parse(mem['stoic-garden-v2']).items.length === 1, 'delete removes the item');
+  // delete the courage item: tap the card to open the editor, then delete
+  const cCard = byId.items.children.find(c => c.classList.contains('item') && c.querySelectorAll('.item-title')[0]._text.includes('PR'));
+  cCard.click();
+  ok(byId.overlay.classList.contains('open'), 'tapping a card opens the editor');
+  byId.cDelete.click();
+  ok(JSON.parse(mem['stoic-garden-v2']).items.length === 1, 'delete from editor removes the item');
 } catch (e) {
   fail++; console.log('  THREW:', e.message, '\n', (e.stack || '').split('\n').slice(1, 4).join('\n'));
 }

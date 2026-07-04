@@ -34,10 +34,11 @@ const STAGES = [
 ];
 const ROOTED_MIN_POINTS = 16;
 
-// Wilt from fell-short items, fading over WILT_WINDOW days. Rooted plants have a floor.
-const WILT_WINDOW = 10;
-const HEALTH_SCALE = 5;
-const ROOTED_FLOOR = 0.5;
+// Failures accumulate as harm and never fade on their own. Tolerance grows with the
+// plant, so you heal only by doing better (more growth lifts tolerance). A rooted plant
+// tolerates far more harm — but cross its tolerance and it wilts too. No immunity.
+const TOL_BASE = 3;
+const TOL_PER_GROWTH = 0.5;
 
 const EPIGRAPHS = [
   { text: 'You have power over your mind — not outside events. Realize this, and you will find strength.', by: 'Marcus Aurelius' },
@@ -77,42 +78,35 @@ function growthFraction(item) {
   if (item.outcome === 'fell_short') return 0;
   return subtaskFraction(item); // open: partial credit for subtask progress
 }
-function resolvedDay(item) { return item.resolvedDate || item.date; }
-
 function pointsFor(items, key) {
   let p = 0;
   for (const it of items) if (it.pillar === key) p += weightValue(it) * growthFraction(it);
   return p;
 }
-function wiltPressureFor(items, key) {
-  let pressure = 0;
-  const today = todayStr();
-  for (const it of items) {
-    if (it.pillar !== key || it.outcome !== 'fell_short') continue;
-    const age = daysBetween(resolvedDay(it), today);
-    pressure += weightValue(it) * Math.max(0, 1 - age / WILT_WINDOW);
-  }
-  return pressure;
+// accumulated weight of what you consciously marked "fell short" — this never fades
+function harmFor(items, key) {
+  let h = 0;
+  for (const it of items) if (it.pillar === key && it.outcome === 'fell_short') h += weightValue(it);
+  return h;
 }
+function toleranceFor(points) { return TOL_BASE + points * TOL_PER_GROWTH; }
 function stageForPoints(points) {
   let s = STAGES[0];
   for (const st of STAGES) if (points >= st.minPoints) s = st;
   return s;
 }
-function healthFor(points, pressure) {
-  const rooted = points >= ROOTED_MIN_POINTS;
-  return clamp(1 - pressure / HEALTH_SCALE, rooted ? ROOTED_FLOOR : 0, 1);
-}
+// health falls as harm nears tolerance; recovers only as growth lifts tolerance
+function healthFor(points, harm) { return clamp(1 - harm / toleranceFor(points), 0, 1); }
 
 function gardenState(items) {
   return VIRTUES.map(v => {
     const points = pointsFor(items, v.key);
-    const pressure = wiltPressureFor(items, v.key);
+    const harm = harmFor(items, v.key);
     const stage = stageForPoints(points);
     return {
-      ...v, points, stage: stage.name, stageLabel: stage.label,
+      ...v, points, harm, stage: stage.name, stageLabel: stage.label,
       rooted: points >= ROOTED_MIN_POINTS,
-      health: healthFor(points, pressure),
+      health: healthFor(points, harm),
     };
   });
 }

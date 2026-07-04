@@ -69,29 +69,42 @@ function renderItems() {
   list.forEach(it => wrap.appendChild(itemCard(it)));
 }
 
+const OUTCOME_GLYPH = { open: '○', met: '✓', fell_short: '✗' };
+
+function outcomeToggle(it) {
+  const g = el('div', 'otoggle');
+  Object.keys(OUTCOMES).forEach(o => {
+    const b = el('button', 'otog o-' + o + (it.outcome === o ? ' active' : ''), OUTCOME_GLYPH[o]);
+    b.setAttribute('aria-label', OUTCOMES[o].label);
+    b.addEventListener('click', ev => { ev.stopPropagation(); STATE = setOutcome(STATE, it.id, o); renderAll(); });
+    g.appendChild(b);
+  });
+  return g;
+}
+
 function itemCard(it) {
   const v = VIRTUE_BY_KEY[it.pillar];
   const card = el('div', 'item');
   card.style.setProperty('--accent', v.accent);
   if (it.outcome === 'met') card.classList.add('is-met');
   if (it.outcome === 'fell_short') card.classList.add('is-short');
+  card.addEventListener('click', () => openComposer(it.id)); // tap the card to edit
 
   const head = el('div', 'item-head');
-  head.appendChild(el('span', 'item-dot'));
+  const dot = el('span', 'item-dot'); dot.style.background = v.accent;
+  head.appendChild(dot);
   head.appendChild(el('span', 'item-title', it.title || '(untitled)'));
   head.appendChild(weightBadge(it.weight));
-  const acts = el('div', 'item-acts');
-  const edit = el('button', 'icon-btn', '✎'); edit.title = 'Edit'; edit.addEventListener('click', () => openComposer(it.id));
-  const del = el('button', 'icon-btn', '🗑'); del.title = 'Delete';
-  del.addEventListener('click', () => { if (confirm('Delete this item?')) { STATE = removeItem(STATE, it.id); renderAll(); } });
-  acts.appendChild(edit); acts.appendChild(del);
-  head.appendChild(acts);
   card.appendChild(head);
 
-  head.querySelector('.item-dot').style.background = v.accent;
-  const pill = el('span', 'item-pillar', v.label);
-  pill.style.color = v.accent;
-  card.appendChild(pill);
+  const meta = el('div', 'item-meta');
+  const pill = el('span', 'item-pillar', v.label); pill.style.color = v.accent;
+  meta.appendChild(pill);
+  if (it.subtasks && it.subtasks.length) {
+    meta.appendChild(el('span', 'item-sub-count', `${it.subtasks.filter(s => s.done).length}/${it.subtasks.length}`));
+  }
+  meta.appendChild(outcomeToggle(it));
+  card.appendChild(meta);
 
   if (it.desc) card.appendChild(el('p', 'item-desc', it.desc));
 
@@ -99,22 +112,16 @@ function itemCard(it) {
     const sub = el('div', 'subtasks');
     it.subtasks.forEach(s => {
       const row = el('label', 'subtask');
+      row.addEventListener('click', ev => ev.stopPropagation());
       const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!s.done;
-      cb.addEventListener('change', () => { STATE = toggleSubtask(STATE, it.id, s.id); renderAll(); });
+      cb.addEventListener('click', ev => ev.stopPropagation());
+      cb.addEventListener('change', ev => { ev.stopPropagation(); STATE = toggleSubtask(STATE, it.id, s.id); renderAll(); });
       row.appendChild(cb);
       row.appendChild(el('span', s.done ? 'subtask-done' : '', s.title));
       sub.appendChild(row);
     });
     card.appendChild(sub);
   }
-
-  const seg = el('div', 'outcome-seg');
-  Object.keys(OUTCOMES).forEach(o => {
-    const btn = el('button', 'seg-btn' + (it.outcome === o ? ' active o-' + o : ''), OUTCOMES[o].label);
-    btn.addEventListener('click', () => { STATE = setOutcome(STATE, it.id, o); renderAll(); });
-    seg.appendChild(btn);
-  });
-  card.appendChild(seg);
   return card;
 }
 
@@ -132,7 +139,7 @@ function renderMirror(gs) {
     const fill = el('span', 'mrow-fill');
     fill.style.width = `${Math.round((s.points / max) * 100)}%`;
     fill.style.background = s.accent;
-    if (s.health < 0.55 && !s.rooted) fill.classList.add('wilting');
+    if (s.health < 0.6) fill.classList.add('wilting');
     track.appendChild(fill);
     row.appendChild(track);
     row.appendChild(el('span', 'mrow-stage', s.rooted ? 'rooted' : s.stageLabel));

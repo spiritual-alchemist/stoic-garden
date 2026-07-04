@@ -207,7 +207,7 @@ function initGarden(canvas) {
     ctx.drawImage(bg, 0, 0);
     state.forEach((s, i) => {
       const wind = Math.round(Math.sin(ts / 1400 + i * 0.7));
-      const b = brushFor(ctx, S, centers[i], GY - 1, s.rooted ? 1 : s.health, wind);
+      const b = brushFor(ctx, S, centers[i], GY - 1, s.health, wind);
       drawPlant(b, s.key, s.stage, s.accent);
     });
     requestAnimationFrame(frame);

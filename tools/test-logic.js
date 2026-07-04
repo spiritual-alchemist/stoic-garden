@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'data.js'), 'utf8');
-const m = new Function(src + ';return {pointsFor,growthFraction,subtaskFraction,stageForPoints,wiltPressureFor,healthFor,gardenState,mirrorLine,todayStr,ymd,addDays};')();
+const m = new Function(src + ';return {pointsFor,growthFraction,subtaskFraction,harmFor,toleranceFor,stageForPoints,healthFor,gardenState,mirrorLine,todayStr,ymd,addDays};')();
 
 let pass = 0, fail = 0;
 const ok = (c, msg) => { if (c) pass++; else { fail++; console.log('  FAIL:', msg); } };
@@ -24,16 +24,22 @@ ok(near(m.growthFraction(I({ outcome: 'open', subtasks: [{ done: true }, { done:
 // stage thresholds on points
 ok(m.stageForPoints(0).name === 'seed' && m.stageForPoints(1).name === 'sprout' && m.stageForPoints(4).name === 'young' && m.stageForPoints(9).name === 'flowering' && m.stageForPoints(16).name === 'rooted', 'stage thresholds by points');
 
-// wilt: weighted, decays with age, rooted has a floor
+// wilt: accumulated harm vs growth-scaled tolerance; heal by growing, not waiting
 {
-  const fresh = [I({ pillar: 'justice', weight: 'notable', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
-  ok(near(m.healthFor(0, m.wiltPressureFor(fresh, 'justice')), 0.6), 'fresh notable fell-short -> health 0.6');
-  const piv = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
-  ok(near(m.healthFor(0, m.wiltPressureFor(piv, 'justice')), 0.4), 'fresh pivotal fell-short -> health 0.4 (bigger weight hurts more)');
-  const old = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(10) })];
-  ok(m.healthFor(0, m.wiltPressureFor(old, 'justice')) === 1, 'fell-short fully faded after the wilt window');
-  const rooted = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short', resolvedDate: daysAgo(0) })];
-  ok(m.healthFor(16, m.wiltPressureFor(rooted, 'justice')) === 0.5, 'rooted plant resists: health floored at 0.5');
+  const notable = [I({ pillar: 'justice', weight: 'notable', outcome: 'fell_short' })];
+  ok(near(m.healthFor(0, m.harmFor(notable, 'justice')), 1 / 3), 'fresh notable fell-short on ungrown pillar -> health 0.33');
+  const piv = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short' })];
+  ok(m.healthFor(0, m.harmFor(piv, 'justice')) === 0, 'pivotal fell-short on ungrown pillar -> fully wilted (fragile)');
+  // rooted (growth 16 -> tolerance 11) resists but is NOT immune
+  const oneOnRooted = [I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short' })];
+  ok(near(m.healthFor(16, m.harmFor(oneOnRooted, 'justice')), 1 - 3 / 11), 'rooted resists one pivotal (~0.73)');
+  const manyOnRooted = [];
+  for (let i = 0; i < 4; i++) manyOnRooted.push(I({ pillar: 'justice', weight: 'pivotal', outcome: 'fell_short' }));
+  ok(m.healthFor(16, m.harmFor(manyOnRooted, 'justice')) === 0, 'enough harm wilts even a rooted plant (no immunity)');
+  // failures never fade; you heal only by growing
+  const stale = [I({ pillar: 'justice', weight: 'notable', outcome: 'fell_short', date: daysAgo(60), resolvedDate: daysAgo(60) })];
+  ok(m.harmFor(stale, 'justice') === 2, 'old failures still count fully (no time decay)');
+  ok(m.healthFor(2, 2) < m.healthFor(16, 2), 'same harm hurts less as the plant grows (heal by doing better)');
 }
 
 // gardenState + mirror
