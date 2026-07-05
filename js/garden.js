@@ -113,6 +113,26 @@ function drawWillow(b, m, fo) {
     for (let k = 1; k <= frondLen; k++) { const y = cy + ry - 1 + k; if (y >= 0) break; b(1 + dx, y, (k % 2) ? fo.d : fo.b); }
   }
 }
+// tall, narrow column — poplar
+function drawColumn(b, m, fo) {
+  const trunkH = Math.max(2, Math.round((4 + m * 0.7) * 0.25));
+  trunk(b, trunkH, GC.trunk, GC.trunkD);
+  const rx = 1 + Math.floor(m / 5), ry = 3 + Math.floor(m / 2.5);
+  ellipseCanopy(b, -trunkH - ry + 1, Math.max(2, rx), ry, fo);
+}
+// low wide mound, barely a trunk — hazel shrub
+function drawBush(b, m, fo) {
+  b(0, -1, GC.trunkD);
+  const rx = 3 + Math.floor(m / 2.4), ry = 2 + Math.floor(m / 3);
+  ellipseCanopy(b, -ry, rx, ry, fo);
+}
+// tall trunk, wide flat crown — acacia
+function drawSpread(b, m, fo) {
+  const Ht = 6 + Math.round(m * 0.7), trunkH = Math.max(3, Math.round(Ht * 0.6));
+  trunk(b, trunkH, GC.trunk, GC.trunkD);
+  const rx = 3 + Math.floor(m / 2.2), ry = 1 + Math.floor(m / 5);
+  ellipseCanopy(b, -trunkH - ry, rx, ry, fo);
+}
 function scarMark(b, m) { const h = Math.min(15, 4 + m); for (let i = 3; i <= Math.min(h - 1, 9); i++) b(0, -i, GC.scar); b(2, -h + 2, GC.deadD); }
 function drawScarred(b, m, winter) {
   const h = Math.min(15, 4 + m);
@@ -144,6 +164,9 @@ function drawPlant(b, spKey, m, harm, season) {
   else if (sp.shape === 'blossom') { if (season === 'spring') drawBlossom(b, m, sp.foliage, sp.blossom); else drawBroad(b, m, fo); }
   else if (sp.shape === 'slender') drawSlender(b, m, fo);
   else if (sp.shape === 'willow') drawWillow(b, m, fo);
+  else if (sp.shape === 'column') drawColumn(b, m, fo);
+  else if (sp.shape === 'bush') drawBush(b, m, fo);
+  else if (sp.shape === 'spread') drawSpread(b, m, fo);
   else drawBroad(b, m, fo);
   if (scarred) scarMark(b, m);
 }

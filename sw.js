@@ -1,5 +1,5 @@
 // Offline-first shell cache. Bump CACHE when assets change.
-const CACHE = 'stoic-garden-v10';
+const CACHE = 'stoic-garden-v11';
 const ASSETS = [
   './', './index.html', './css/style.css',
   './js/data.js', './js/store.js', './js/garden.js', './js/app.js',

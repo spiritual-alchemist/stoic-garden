@@ -15,13 +15,16 @@ const WEIGHTS = { light: { value: 1, label: 'Light' }, notable: { value: 2, labe
 const WEIGHT_ORDER = ['light', 'notable', 'pivotal'];
 const OUTCOMES = { open: { label: 'Open' }, met: { label: 'Met it' }, fell_short: { label: 'Fell short' } };
 
-// Distinct SILHOUETTES, not just colors.
+// Distinct SILHOUETTES, not just colors — eight species, so any one is rare.
 const SPECIES = [
   { key: 'oak',    shape: 'broad',   foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' } },
   { key: 'pine',   shape: 'cone',    foliage: { b: '#4e8a46', l: '#69a85e', d: '#2f5e2a' }, evergreen: true },
   { key: 'cherry', shape: 'blossom', foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, blossom: '#f2a8c8' },
   { key: 'birch',  shape: 'slender', foliage: { b: '#8cbf5e', l: '#a8d477', d: '#5f9440' } },
   { key: 'willow', shape: 'willow',  foliage: { b: '#9cb85a', l: '#bcd47a', d: '#6f8a3e' } },
+  { key: 'poplar', shape: 'column',  foliage: { b: '#84b84e', l: '#a3d06a', d: '#5a8a38' } },
+  { key: 'hazel',  shape: 'bush',    foliage: { b: '#5fa048', l: '#7cbb5e', d: '#3d7330' } },
+  { key: 'acacia', shape: 'spread',  foliage: { b: '#8faa4e', l: '#adc46e', d: '#647d34' } },
 ];
 const SPECIES_BY_KEY = Object.fromEntries(SPECIES.map(s => [s.key, s]));
 
