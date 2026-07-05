@@ -94,7 +94,7 @@ function completedInOrder(items) {
 function rebuildGardens(items) {
   const gardens = emptyGardens();
   for (const it of items) it.effect = null;
-  for (const it of completedInOrder(items)) it.effect = applyEffect(gardens[it.pillar], it, makeRng(it.id));
+  for (const it of completedInOrder(items)) it.effect = applyEffect(gardens[it.pillar], it, Math.random);
   return gardens;
 }
 

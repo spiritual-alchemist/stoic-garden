@@ -42,27 +42,29 @@ const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'wis
 { const g = { plants: [], scorch: 0 }; const e = m.applyEffect(g, I({ outcome: 'fell_short' }), scripted([0])); m.undoEffect(g, e); ok(g.scorch === 0, 'scorch on empty bed, then undone'); }
 
 // ---- the no-reshuffle guarantee, through the real store ----
-function growthMap(garden) { const o = {}; for (const p of garden.plants) o[p.id] = p.growth; return o; }
+// with fresh rolls, editing a task re-rolls ITS OWN effect (maybe a different tree); the
+// guarantee is that no OTHER task is ever re-rolled — their effects stay identical.
 {
   let seq = 0;
   const st = { version: 4, items: [], gardens: m.emptyGardens() };
   const add = (w) => { seq++; m.addItem(st, { title: 't' + seq, pillar: 'wisdom', weight: w, outcome: 'met', date: m.addDays(m.todayStr(), -20 + seq) }); return st.items[st.items.length - 1]; };
   const a = add('notable'), b = add('pivotal'), c = add('notable'), d = add('light'), e2 = add('pivotal');
-  const before = growthMap(st.gardens.wisdom);
-  const target = b.effect ? b.effect.plantId : null;
+  const others = () => JSON.stringify(st.items.filter(i => i.id !== b.id).map(i => i.effect));
+  const before = others();
 
   m.setOutcome(st, b.id, 'fell_short'); // flip ONE task
-  const after = growthMap(st.gardens.wisdom);
-  let stable = true;
-  for (const id in before) { if (id === target) continue; if (!(id in after) || after[id] !== before[id]) stable = false; }
-  ok(stable, 'flipping one task met->fell_short leaves every OTHER tree identical (no reshuffle)');
+  ok(others() === before, 'flipping one task never re-rolls any OTHER task (their effects are identical)');
   ok(b.effect && (b.effect.kind === 'harm' || b.effect.kind === 'scorch'), 'the flipped task now carries a harm/scorch effect');
 
   m.setOutcome(st, b.id, 'met'); // flip it back
-  const back = growthMap(st.gardens.wisdom);
-  let stable2 = true;
-  for (const id in before) { if (id === target) continue; if (!(id in back) || back[id] !== before[id]) stable2 = false; }
-  ok(stable2, 'flipping back to met still leaves the other trees untouched');
+  ok(others() === before, 'flipping back still leaves every other task untouched');
+}
+
+// ---- the die genuinely samples plant-vs-grow each completion ----
+{
+  const g = { plants: [], scorch: 0 }; let planted = 0, grew = 0;
+  for (let i = 0; i < 50; i++) { const e = m.applyEffect(g, { id: 'z' + i, outcome: 'met', weight: 'notable', pillar: 'wisdom' }, Math.random); if (e.kind === 'plant') planted++; else grew++; }
+  ok(planted > 0 && grew > 0, `die produces both outcomes over 50 rolls (${planted} planted, ${grew} grew)`);
 }
 
 // stats are human-countable

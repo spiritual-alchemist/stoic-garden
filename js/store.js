@@ -20,11 +20,12 @@ function ensure(s) {
 }
 function saveState(state) { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 
-// undo the task's previous effect, then apply its current one
+// undo the task's previous effect, then apply its current one — with a FRESH die roll
+// each time, so completing (or re-completing) a task genuinely samples plant-vs-grow.
 function reconcile(state, item, prevPillar, prevEffect) {
   if (prevEffect && state.gardens[prevPillar]) undoEffect(state.gardens[prevPillar], prevEffect);
   if (item.outcome === 'met' || item.outcome === 'fell_short') {
-    item.effect = applyEffect(state.gardens[item.pillar], item, makeRng(item.id));
+    item.effect = applyEffect(state.gardens[item.pillar], item, Math.random);
   } else {
     item.effect = null;
   }
