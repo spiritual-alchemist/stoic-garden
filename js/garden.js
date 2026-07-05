@@ -195,28 +195,32 @@ function drawWeatherAnim(ctx, pw, ph, season, t) {
   }
 }
 
-// birds gliding by day, fireflies blinking on spring/summer nights
-function drawWildlife(ctx, pw, gpx, season, hour, t) {
+// birds gliding by day (drawn in LOGICAL px so they scale with the scene, not stay
+// insect-sized in the big view); fireflies are small fixed glows on spring/summer nights.
+function drawWildlife(ctx, W, GY, S, season, hour, t) {
   const night = hour < 5 || hour >= 20;
   if (night) {
     if (season === 'spring' || season === 'summer') {
+      const pw = W * S, gpx = GY * S;
       ctx.fillStyle = '#f6e9a0';
       for (let i = 0; i < 5; i++) {
         const x = (((i * 311 + 40) + t * 8 * (i % 2 ? 1 : -1)) % pw + pw) % pw;
-        const y = gpx * 0.42 + Math.sin(t * 0.6 + i) * gpx * 0.16;
-        ctx.globalAlpha = Math.sin(t * 3 + i * 2) > 0 ? 1 : 0.25;
-        ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+        const y = gpx * 0.45 + Math.sin(t * 0.6 + i) * gpx * 0.16;
+        ctx.globalAlpha = Math.sin(t * 3 + i * 2) > 0 ? 1 : 0.3;
+        ctx.fillRect(Math.round(x), Math.round(y), 3, 3);
       }
       ctx.globalAlpha = 1;
     }
   } else if (season !== 'monsoon') {
-    ctx.fillStyle = '#4a4038';
+    const px = (lx, ly) => { ctx.fillRect(Math.round(lx * S), Math.round(ly * S), S, S); };
+    ctx.fillStyle = '#3f372f';
     for (let i = 0; i < 2; i++) {
-      const x = (t * (i ? 30 : 24) + i * pw * 0.5) % (pw + 40) - 20;
-      const y = gpx * 0.22 + Math.sin(t * 0.5 + i) * gpx * 0.05, wing = Math.sin(t * 6 + i) > 0 ? 1 : -1;
-      ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
-      ctx.fillRect(Math.round(x - 3), Math.round(y - wing), 2, 2);
-      ctx.fillRect(Math.round(x + 3), Math.round(y - wing), 2, 2);
+      const lx = ((t * (i ? 2.4 : 1.9) + i * W * 0.5) % (W + 8)) - 4;
+      const ly = GY * 0.22 + Math.sin(t * 0.5 + i) * GY * 0.06;
+      const up = Math.sin(t * 6 + i) > 0; // wing beat
+      px(lx, ly); // body
+      px(lx - 1, ly + (up ? -1 : 0)); px(lx + 1, ly + (up ? -1 : 0)); // inner wings
+      px(lx - 2, ly + (up ? 0 : 1)); px(lx + 2, ly + (up ? 0 : 1)); // outer wingtips
     }
   }
 }
@@ -254,7 +258,7 @@ function _gdraw(v, t) {
     drawPlant(windyBrush(ctx, S, cx, GY - 1, sway), p.species, plantMaturity(p), p.harm, season);
   }
   drawWeatherAnim(ctx, cw, Math.max(4, (GY - 1) * S), season, t);
-  drawWildlife(ctx, cw, GY * S, season, hour, t);
+  drawWildlife(ctx, W, GY, S, season, hour, t);
 }
 
 function stripWidthFor(plantCount, spacing) { return 6 + Math.max(1, plantCount) * spacing + 6; }
