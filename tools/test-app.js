@@ -35,7 +35,7 @@ function Elem(tag) {
 }
 const IDS = ['epigraph', 'plots', 'mirrorLine', 'dayPrev', 'dayNext', 'dayLabel', 'items', 'addItem', 'export', 'import', 'importFile',
   'detail', 'detailBack', 'detailPrev', 'detailNext', 'detailTitle', 'detailGreek', 'detailCanvas', 'detailScroll', 'detailStats', 'detailLedger',
-  'overlay', 'cClose', 'cHeading', 'cTitle', 'cDesc', 'cPillar', 'cWeight', 'cOutcome', 'cSubList', 'cSubInput', 'cSubAdd', 'cSave', 'cDelete'];
+  'overlay', 'cClose', 'cHeading', 'cEffect', 'cTitle', 'cDesc', 'cPillar', 'cWeight', 'cOutcome', 'cSubList', 'cSubInput', 'cSubAdd', 'cSave', 'cDelete'];
 const byId = {}; IDS.forEach(id => byId[id] = Elem(id === 'detailCanvas' ? 'canvas' : 'div'));
 function seg(parent, key, val, label) { const b = Elem('button'); b.dataset[key] = val; b.textContent = label; parent.appendChild(b); }
 ['light', 'notable', 'pivotal'].forEach(w => seg(byId.cWeight, 'w', w, w));
@@ -90,6 +90,14 @@ try {
   byId.plots.children[2].click();
   ok(byId.detail.classList.contains('open'), 'tapping a plot opens the detail garden');
   ok(/tree|bare/.test(byId.detailStats._text), 'detail shows garden stats: "' + byId.detailStats._text + '"');
+  const ledRow = byId.detailLedger.querySelectorAll('.led-row')[0];
+  ok(!!ledRow, 'the grove history has a clickable row');
+  if (ledRow) {
+    ledRow.click();
+    ok(byId.overlay.classList.contains('open'), 'clicking a ledger row opens the task metadata');
+    ok(byId.cEffect._text.length > 0, 'the metadata shows its garden effect: "' + byId.cEffect._text + '"');
+    byId.cClose.click();
+  }
   byId.detailBack.click();
   ok(!byId.detail.classList.contains('open'), 'back returns to the field');
 

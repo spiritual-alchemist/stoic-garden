@@ -127,10 +127,27 @@ function renderLedger() {
     row.appendChild(el('span', 'led-mark', e.outcome === 'met' ? '✦' : '✗'));
     const body = el('div', 'led-body');
     body.appendChild(el('span', 'led-title', e.title || WEIGHTS[e.weight].label));
-    body.appendChild(el('span', 'led-sub', `${WEIGHTS[e.weight].label.toLowerCase()} · ${humanDate(e.resolvedDate || e.date)}`));
+    const eff = effectSummary(e);
+    body.appendChild(el('span', 'led-sub', `${WEIGHTS[e.weight].label.toLowerCase()} · ${humanDate(e.resolvedDate || e.date)}${eff ? ' · ' + eff.toLowerCase() : ''}`));
     row.appendChild(body);
+    row.appendChild(el('span', 'led-chev', '›'));
+    row.addEventListener('click', () => openComposer(e.id));
     led.appendChild(row);
   });
+}
+// what a task did to the garden — the metadata unique to this place
+const VOWEL = /^[aeiou]/i;
+function withArticle(w) { return (VOWEL.test(w) ? 'an ' : 'a ') + w; }
+function effectSummary(item) {
+  const e = item.effect; if (!e) return '';
+  if (e.kind === 'scorch') return 'Scorched bare ground';
+  const g = STATE.gardens[item.pillar];
+  const p = g && g.plants.find(x => x.id === e.plantId);
+  const what = p ? withArticle(p.species) : 'a tree';
+  if (e.kind === 'plant') return `Planted ${what}`;
+  if (e.kind === 'grow') return `Grew ${what}`;
+  if (e.kind === 'harm') return `Wounded ${what}`;
+  return '';
 }
 function updateDetailArrows() {
   const sc = $('#detailScroll'); if (!sc) return;
@@ -220,6 +237,8 @@ function openComposer(id) {
     $('#cTitle').value = ''; $('#cDesc').value = ''; $('#cPillar').value = VIRTUES[0].key;
     composer.weight = 'notable'; composer.outcome = 'open'; $('#cHeading').textContent = 'New item'; $('#cDelete').style.display = 'none';
   }
+  const eff = id ? effectSummary(STATE.items.find(x => x.id === id)) : '';
+  $('#cEffect').textContent = eff; $('#cEffect').style.display = eff ? '' : 'none';
   paintSeg('#cWeight', 'weight'); paintSeg('#cOutcome', 'outcome'); renderComposerSubs();
   $('#overlay').classList.add('open'); setTimeout(() => $('#cTitle').focus(), 60);
 }
@@ -228,7 +247,10 @@ function saveComposer() {
   const fields = { title: $('#cTitle').value, desc: $('#cDesc').value, pillar: $('#cPillar').value, weight: composer.weight, outcome: composer.outcome, subtasks: composer.subtasks, date: currentDay };
   if (!fields.title.trim() && !composer.subtasks.length) { $('#cTitle').focus(); return; }
   if (composer.id) {
-    const patch = { ...fields, resolvedDate: fields.outcome === 'open' ? null : (STATE.items.find(x => x.id === composer.id).resolvedDate || todayStr()) };
+    const it = STATE.items.find(x => x.id === composer.id);
+    // editing keeps the item's own date — never yank a past event to today
+    const patch = { title: fields.title, desc: fields.desc, pillar: fields.pillar, weight: fields.weight, outcome: fields.outcome, subtasks: fields.subtasks };
+    patch.resolvedDate = fields.outcome === 'open' ? null : (it.resolvedDate || it.date);
     STATE = updateItem(STATE, composer.id, patch);
   } else STATE = addItem(STATE, fields);
   if (navigator.vibrate) navigator.vibrate(10);
