@@ -1,6 +1,7 @@
-// The garden's knowledge as data. Pillars, weights, and how weighted, three-state
-// items become growth and wilt. Growth from what you MET, wilt only from what you
-// consciously mark FELL SHORT. Open items and neglect never punish.
+// The garden's knowledge and its engine. The garden is not stored separately — it is
+// REPLAYED deterministically from your item log: each completed item rolls its own dice
+// (seeded from its id), so the forest is identical every time you open it, yet un-marking
+// or deleting an item just recomputes it correctly. Stable, and reversible for free.
 
 const VIRTUES = [
   { key: 'wisdom',     label: 'Wisdom',     greek: 'sophia',     accent: '#8a6fd6' },
@@ -10,35 +11,105 @@ const VIRTUES = [
 ];
 const VIRTUE_BY_KEY = Object.fromEntries(VIRTUES.map(v => [v.key, v]));
 
-// Weight scales both reward and punishment. Value is the growth/wilt magnitude.
-const WEIGHTS = {
-  light:   { value: 1, label: 'Light' },
-  notable: { value: 2, label: 'Notable' },
-  pivotal: { value: 3, label: 'Pivotal' },
-};
+const WEIGHTS = { light: { value: 1, label: 'Light' }, notable: { value: 2, label: 'Notable' }, pivotal: { value: 3, label: 'Pivotal' } };
 const WEIGHT_ORDER = ['light', 'notable', 'pivotal'];
+const OUTCOMES = { open: { label: 'Open' }, met: { label: 'Met it' }, fell_short: { label: 'Fell short' } };
 
-const OUTCOMES = {
-  open:       { label: 'Open' },
-  met:        { label: 'Met it' },
-  fell_short: { label: 'Fell short' },
-};
-
-// Stage is read off accumulated GROWTH POINTS (weighted mets). The code interprets data.
-const STAGES = [
-  { name: 'seed',      minPoints: 0,  label: 'unplanted' },
-  { name: 'sprout',    minPoints: 1,  label: 'sprouting' },
-  { name: 'young',     minPoints: 4,  label: 'growing' },
-  { name: 'flowering', minPoints: 9,  label: 'flowering' },
-  { name: 'rooted',    minPoints: 16, label: 'rooted · perennial' },
+// Plant species — data, not bespoke art. Each is a recipe the renderer reads.
+const SPECIES = [
+  { key: 'oak',    shape: 'round',   foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, evergreen: false },
+  { key: 'pine',   shape: 'pine',    foliage: { b: '#4e8a46', l: '#69a85e', d: '#356b2e' }, evergreen: true },
+  { key: 'cherry', shape: 'blossom', foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, blossom: '#f2a8c8', evergreen: false },
+  { key: 'birch',  shape: 'birch',   foliage: { b: '#7cb85a', l: '#9ccf6e', d: '#4f8a3c' }, evergreen: false },
+  { key: 'maple',  shape: 'round',   foliage: { b: '#68a84e', l: '#8cc466', d: '#3f7330' }, autumnal: true, evergreen: false },
 ];
-const ROOTED_MIN_POINTS = 16;
+const SPECIES_BY_KEY = Object.fromEntries(SPECIES.map(s => [s.key, s]));
 
-// Failures accumulate as harm and never fade on their own. Tolerance grows with the
-// plant, so you heal only by doing better (more growth lifts tolerance). A rooted plant
-// tolerates far more harm — but cross its tolerance and it wilts too. No immunity.
-const TOL_BASE = 3;
-const TOL_PER_GROWTH = 0.5;
+// growth
+const MAX_MATURITY = 12;
+const GROW_NEW_PROB = 0.25; // ~75% grow an existing plant, ~25% plant a new sapling
+function weightValue(item) { return (WEIGHTS[item.weight] || WEIGHTS.notable).value; }
+function plantBaseMaturity(w) { return w; } // pivotal drops a sturdier sapling
+
+// maturity -> stage
+function stageOf(m) { return m < 2 ? 'sprout' : m < 4 ? 'sapling' : m < 7 ? 'young' : m < 10 ? 'mature' : 'old'; }
+// harm needed to scar, by current maturity: young virtue is fragile, old virtue is tough
+function harmThreshold(m) { return m < 4 ? 2 : m < 7 ? 4 : 7; }
+
+// ---- deterministic PRNG, seeded per item id ----
+function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function makeRng(seedStr) {
+  let a = hashStr(seedStr) || 1;
+  return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// ---- the replay: items -> gardens ----
+function completedInOrder(items) {
+  return items
+    .filter(i => i.outcome === 'met' || i.outcome === 'fell_short')
+    .slice()
+    .sort((a, b) => {
+      const ka = (a.resolvedDate || a.date), kb = (b.resolvedDate || b.date);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      if ((a.createdTs || 0) !== (b.createdTs || 0)) return (a.createdTs || 0) - (b.createdTs || 0);
+      return a.id < b.id ? -1 : 1;
+    });
+}
+
+function applyMet(g, item, w, rng) {
+  const growable = g.plants.filter(p => p.m < MAX_MATURITY);
+  const plantNew = g.plants.length === 0 || growable.length === 0 || rng() < GROW_NEW_PROB;
+  if (plantNew) {
+    const sp = SPECIES[Math.floor(rng() * SPECIES.length)];
+    g.plants.push({ id: item.id, species: sp.key, m: plantBaseMaturity(w), harm: 0, scarred: false, healed: false, seq: g.plants.length });
+  } else {
+    const p = growable[Math.floor(rng() * growable.length)];
+    p.m = Math.min(MAX_MATURITY, p.m + w);
+    if (p.scarred) p.healed = true; // fought back to it -> a marked veteran
+  }
+}
+
+function applyHarm(g, item, w, rng) {
+  if (g.plants.length === 0) { g.scorch += 1; return; } // failing a virtue you don't even tend
+  const p = g.plants[Math.floor(rng() * g.plants.length)];
+  p.harm += w;
+  if (!p.scarred && p.harm >= harmThreshold(p.m)) { p.scarred = true; p.healed = false; p.m = Math.max(0, p.m - 2); }
+}
+
+function buildGardens(items) {
+  const gardens = {};
+  for (const v of VIRTUES) gardens[v.key] = { plants: [], scorch: 0 };
+  for (const item of completedInOrder(items)) {
+    const g = gardens[item.pillar];
+    if (!g) continue;
+    const rng = makeRng(item.id);
+    const w = weightValue(item);
+    if (item.outcome === 'met') applyMet(g, item, w, rng);
+    else applyHarm(g, item, w, rng);
+  }
+  return gardens;
+}
+
+// summaries for the field view and the mirror line
+function gardenDepth(g) { return g.plants.reduce((s, p) => s + p.m, 0); }
+function gardenSummary(g) {
+  return {
+    count: g.plants.length,
+    depth: gardenDepth(g),
+    scarred: g.plants.filter(p => p.scarred && !p.healed).length,
+    scorch: g.scorch,
+  };
+}
+
+function mirrorLine(gardens) {
+  const rows = VIRTUES.map(v => ({ label: v.label, depth: gardenDepth(gardens[v.key]) }));
+  const total = rows.reduce((s, r) => s + r.depth, 0);
+  if (total < 3) return null;
+  const sorted = rows.slice().sort((a, b) => b.depth - a.depth);
+  const top = sorted[0], bottom = sorted[sorted.length - 1];
+  if (top.depth === bottom.depth) return null;
+  return `${top.label} is your deepest grove. ${bottom.label} is still bare ground.`;
+}
 
 const EPIGRAPHS = [
   { text: 'You have power over your mind — not outside events. Realize this, and you will find strength.', by: 'Marcus Aurelius' },
@@ -53,70 +124,9 @@ const EPIGRAPHS = [
   { text: 'Confine yourself to the present.', by: 'Marcus Aurelius' },
 ];
 
-// ---- date helpers (local, no UTC drift) ----
-function ymd(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// ---- date helpers ----
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function todayStr() { return ymd(new Date()); }
 function parseYmd(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
 function addDays(s, n) { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); }
-function daysBetween(a, b) { return Math.round((parseYmd(b) - parseYmd(a)) / 86400000); }
-function dayOfYear(d) { return Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000); }
 function humanDate(s) { return parseYmd(s).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); }
-function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
-
-// ---- growth model ----
-function weightValue(item) { return (WEIGHTS[item.weight] || WEIGHTS.notable).value; }
-function subtaskFraction(item) {
-  const s = item.subtasks || [];
-  if (!s.length) return item.outcome === 'met' ? 1 : 0;
-  return s.filter(t => t.done).length / s.length;
-}
-// how much an item has grown its pillar, in [0,1] of its weight
-function growthFraction(item) {
-  if (item.outcome === 'met') return 1;
-  if (item.outcome === 'fell_short') return 0;
-  return subtaskFraction(item); // open: partial credit for subtask progress
-}
-function pointsFor(items, key) {
-  let p = 0;
-  for (const it of items) if (it.pillar === key) p += weightValue(it) * growthFraction(it);
-  return p;
-}
-// accumulated weight of what you consciously marked "fell short" — this never fades
-function harmFor(items, key) {
-  let h = 0;
-  for (const it of items) if (it.pillar === key && it.outcome === 'fell_short') h += weightValue(it);
-  return h;
-}
-function toleranceFor(points) { return TOL_BASE + points * TOL_PER_GROWTH; }
-function stageForPoints(points) {
-  let s = STAGES[0];
-  for (const st of STAGES) if (points >= st.minPoints) s = st;
-  return s;
-}
-// health falls as harm nears tolerance; recovers only as growth lifts tolerance
-function healthFor(points, harm) { return clamp(1 - harm / toleranceFor(points), 0, 1); }
-
-function gardenState(items) {
-  return VIRTUES.map(v => {
-    const points = pointsFor(items, v.key);
-    const harm = harmFor(items, v.key);
-    const stage = stageForPoints(points);
-    return {
-      ...v, points, harm, stage: stage.name, stageLabel: stage.label,
-      rooted: points >= ROOTED_MIN_POINTS,
-      health: healthFor(points, harm),
-    };
-  });
-}
-
-// The mirror: the asymmetry between what you grow and what you let slip.
-function mirrorLine(state) {
-  const total = state.reduce((a, s) => a + s.points, 0);
-  if (total < 3) return null;
-  const sorted = [...state].sort((a, b) => b.points - a.points);
-  const top = sorted[0], bottom = sorted[sorted.length - 1];
-  if (top.points === bottom.points) return null;
-  return `You keep growing ${top.label.toLowerCase()}. ${bottom.label} you keep leaving open.`;
-}

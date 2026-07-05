@@ -14,13 +14,12 @@
 </head>
 <body>
   <main class="app">
-    <header class="head">
-      <p id="epigraph" class="epigraph"></p>
-    </header>
+    <header class="head"><p id="epigraph" class="epigraph"></p></header>
 
-    <canvas id="garden" class="garden" aria-label="Your garden of the four virtues"></canvas>
-
-    <section id="mirror" class="mirror"></section>
+    <section class="field">
+      <div id="plots" class="plots"></div>
+      <p id="mirrorLine" class="mirror-line"></p>
+    </section>
 
     <section class="day">
       <div class="day-nav">
@@ -38,45 +37,48 @@
         <button id="import" class="menu-btn">Import</button>
         <input id="importFile" type="file" accept="application/json" hidden>
       </div>
-      <p class="tiny">Grows from what you meet, wilts only from what you mark fell short. Lives on this device.</p>
+      <p class="tiny">Every virtue is its own garden. It grows from what you meet, scars from what you mark fell short. Lives on this device.</p>
     </footer>
   </main>
+
+  <section id="detail" class="detail">
+    <div class="detail-bar">
+      <button id="detailBack" class="nav-btn" aria-label="Back to the field">‹ Field</button>
+      <div class="detail-title-wrap"><span id="detailTitle" class="detail-title"></span> <span id="detailGreek" class="detail-greek"></span></div>
+    </div>
+    <div class="detail-stage">
+      <button id="detailPrev" class="pan-btn pan-left" aria-label="Pan left">‹</button>
+      <div id="detailScroll" class="detail-scroll"><canvas id="detailCanvas" class="detail-canvas"></canvas></div>
+      <button id="detailNext" class="pan-btn pan-right" aria-label="Pan right">›</button>
+    </div>
+    <p id="detailStats" class="detail-stats"></p>
+  </section>
 
   <div id="overlay" class="overlay">
     <div class="composer" role="dialog" aria-modal="true">
       <button id="cClose" class="composer-close" aria-label="Close">×</button>
       <h2 id="cHeading" class="composer-title">New item</h2>
-
       <label class="field-label" for="cTitle">Title</label>
       <input id="cTitle" class="field" placeholder="Finish the hard PR review">
-
       <label class="field-label" for="cDesc">Description — impact, what it meant</label>
       <textarea id="cDesc" class="field" rows="2" placeholder="Why it matters, what it cost or built (optional)"></textarea>
-
       <label class="field-label" for="cPillar">Pillar</label>
       <select id="cPillar" class="field"></select>
-
       <label class="field-label">Weight</label>
       <div id="cWeight" class="seg">
         <button class="seg-btn" data-w="light">Light</button>
         <button class="seg-btn" data-w="notable">Notable</button>
         <button class="seg-btn" data-w="pivotal">Pivotal</button>
       </div>
-
-      <label class="field-label">Subtasks — progress on any counts</label>
+      <label class="field-label">Subtasks</label>
       <div id="cSubList" class="csub-list"></div>
-      <div class="csub-add">
-        <input id="cSubInput" class="field" placeholder="Add a step, press enter">
-        <button id="cSubAdd" class="menu-btn">Add</button>
-      </div>
-
+      <div class="csub-add"><input id="cSubInput" class="field" placeholder="Add a step, press enter"><button id="cSubAdd" class="menu-btn">Add</button></div>
       <label class="field-label">Outcome</label>
       <div id="cOutcome" class="seg">
         <button class="seg-btn" data-o="open">Open</button>
         <button class="seg-btn" data-o="met">Met it</button>
         <button class="seg-btn" data-o="fell_short">Fell short</button>
       </div>
-
       <div class="composer-actions">
         <button id="cDelete" class="menu-btn danger">Delete</button>
         <button id="cSave" class="composer-save">Save</button>
