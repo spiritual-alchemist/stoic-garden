@@ -259,16 +259,17 @@ function _gloop(ts) {
 }
 function _gdraw(v, t) {
   const o = v.getOpts(); if (!o) return;
-  const { W, H, GY, S, spacing, clip, plants, scorch, hour, season } = o;
+  const { W, H, GY, S, gap, clip, plants, scorch, hour, season } = o;
   const cw = W * S, ch = H * S;
   const key = `${season}:${Math.floor(hour)}:${W}:${H}:${S}`;
   if (v.key !== key || v.bg.width !== cw) { v.bg.width = cw; v.bg.height = ch; drawSceneBg(v.bg.getContext('2d'), S, W, H, GY, hour, season); v.key = key; }
   const ctx = v.ctx; ctx.imageSmoothingEnabled = false;
   ctx.drawImage(v.bg, 0, 0);
   for (let i = 0; i < Math.min(scorch || 0, 6); i++) { ctx.fillStyle = season === 'winter' ? GC.snowD : GC.scorch; ctx.fillRect((8 + i * 7) * S, GY * S, 3 * S, 1 * S); }
-  const amp = season === 'monsoon' ? 1.5 : 1, x0 = 6;
+  const amp = season === 'monsoon' ? 1.5 : 1;
+  const { xs } = layoutPlants(plants, 6, gap);
   for (let i = 0; i < plants.length; i++) {
-    const cx = x0 + i * spacing; if (clip && cx > W - 3) break;
+    const cx = xs[i]; if (clip && cx > W - 3) break;
     const p = plants[i], sway = Math.round(Math.sin(t * 1.1 + i * 0.7) * amp);
     drawPlant(windyBrush(ctx, S, cx, GY - 1, sway), p.species, plantMaturity(p), p.harm, season);
   }
@@ -276,4 +277,23 @@ function _gdraw(v, t) {
   drawWildlife(ctx, W, GY, S, season, hour, t, v.seed);
 }
 
-function stripWidthFor(plantCount, spacing) { return 6 + Math.max(1, plantCount) * spacing + 6; }
+// approximate canopy half-width (logical px) per species + maturity, so trees pack tight
+function plantHalfWidth(spKey, m) {
+  if (m < 2) return 2;
+  const sp = SPECIES_BY_KEY[spKey] || SPECIES[0];
+  switch (sp.shape) {
+    case 'cone': return 3 + Math.floor(m / 2.6);
+    case 'slender': return 3 + Math.floor(m / 4.5);
+    case 'column': return 3 + Math.floor(m / 5);
+    case 'willow': return 4 + Math.floor(m / 2.6);
+    case 'bush': return 4 + Math.floor(m / 2.4);
+    default: return 3 + Math.floor(m / 2.6);
+  }
+}
+// place each tree by its own width + a small consistent gap; returns centers + total width
+function layoutPlants(plants, x0, gap) {
+  const xs = []; let cx = x0;
+  for (const p of plants) { const hw = plantHalfWidth(p.species, plantMaturity(p)); cx += hw; xs.push(cx); cx += hw + gap; }
+  return { xs, endX: cx };
+}
+function gardenStripWidth(plants, gap) { return Math.max(40, layoutPlants(plants, 6, gap).endX + 6); }

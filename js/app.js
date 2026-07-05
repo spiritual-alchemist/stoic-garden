@@ -10,13 +10,13 @@ const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
 const nowHour = () => new Date().getHours();
 
-const FIELD = { W: 64, H: 36, GY: 27, S: 5, spacing: 9 };
-const DETAIL = { H: 28, GY: 20, spacing: 16 };
+const FIELD = { W: 64, H: 36, GY: 27, S: 5, gap: 2 };
+const DETAIL = { H: 28, GY: 20, gap: 3, nominal: 14 };
 
 function init() {
   $('#epigraph').innerHTML = epigraphHtml();
   buildPlots();
-  gardenViewAttach($('#detailCanvas'), () => detailBed ? ({ W: detailW, H: DETAIL.H, GY: DETAIL.GY, S: detailS, spacing: DETAIL.spacing, clip: false, plants: STATE.gardens[detailBed].plants, scorch: STATE.gardens[detailBed].scorch, hour: nowHour(), season: currentSeason() }) : null);
+  gardenViewAttach($('#detailCanvas'), () => detailBed ? ({ W: detailW, H: DETAIL.H, GY: DETAIL.GY, S: detailS, gap: DETAIL.gap, clip: false, plants: STATE.gardens[detailBed].plants, scorch: STATE.gardens[detailBed].scorch, hour: nowHour(), season: currentSeason() }) : null);
   $('#dayPrev').addEventListener('click', () => { currentDay = addDays(currentDay, -1); renderDay(); });
   $('#dayNext').addEventListener('click', () => { if (currentDay < todayStr()) { currentDay = addDays(currentDay, 1); renderDay(); } });
   $('#addItem').addEventListener('click', () => openComposer(null));
@@ -65,7 +65,7 @@ function buildPlots() {
     wrap.appendChild(plot);
     PLOT_REFS[v.key] = { canvas: cv, name };
     // the animation loop draws this plot live; skip while the detail panel covers the field
-    gardenViewAttach(cv, () => detailBed ? null : ({ W: FIELD.W, H: FIELD.H, GY: FIELD.GY, S: FIELD.S, spacing: FIELD.spacing, clip: true, plants: STATE.gardens[v.key].plants, scorch: STATE.gardens[v.key].scorch, hour: nowHour(), season: currentSeason() }));
+    gardenViewAttach(cv, () => detailBed ? null : ({ W: FIELD.W, H: FIELD.H, GY: FIELD.GY, S: FIELD.S, gap: FIELD.gap, clip: true, plants: STATE.gardens[v.key].plants, scorch: STATE.gardens[v.key].scorch, hour: nowHour(), season: currentSeason() }));
   });
 }
 function renderField() {
@@ -93,9 +93,9 @@ function closeDetail() { $('#detail').classList.remove('open'); detailBed = null
 let detailCssW = 0, detailW = 40, detailS = 8;
 function renderDetail() {
   const g = STATE.gardens[detailBed];
-  const W = Math.max(40, stripWidthFor(g.plants.length, DETAIL.spacing));
+  const W = gardenStripWidth(g.plants, DETAIL.gap);
   const effW = Math.min((window.innerWidth || 560) - 40, 1200); // fill the laptop
-  const S = Math.max(7, Math.min(12, Math.floor(effW / (DETAIL.spacing * 4))));
+  const S = Math.max(7, Math.min(12, Math.floor(effW / (DETAIL.nominal * 4))));
   const cv = $('#detailCanvas');
   detailW = W; detailS = S; detailCssW = W * S;
   cv.width = W * S; cv.height = DETAIL.H * S;
