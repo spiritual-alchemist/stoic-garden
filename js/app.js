@@ -66,10 +66,11 @@ function buildPlots() {
   });
 }
 function renderField() {
-  const hour = nowHour();
+  const hour = nowHour(), season = currentSeason();
+  const st = $('#seasonTag'); if (st) st.textContent = `this week · ${season}`;
   VIRTUES.forEach(v => {
     const g = STATE.gardens[v.key], ref = PLOT_REFS[v.key]; if (!ref) return;
-    drawGardenStrip(ref.canvas.getContext('2d'), FIELD.S, { W: FIELD.W, H: FIELD.H, GY: FIELD.GY, plants: g.plants, scorch: g.scorch, hour, spacing: FIELD.spacing, clip: true });
+    drawGardenStrip(ref.canvas.getContext('2d'), FIELD.S, { W: FIELD.W, H: FIELD.H, GY: FIELD.GY, plants: g.plants, scorch: g.scorch, hour, season, spacing: FIELD.spacing, clip: true });
     const s = gardenStats(g);
     ref.name.textContent = v.label + (s.scars ? ` · ${s.scars} scar${s.scars > 1 ? 's' : ''}` : '');
   });
@@ -89,7 +90,7 @@ function openDetail(bed) {
 function closeDetail() { $('#detail').classList.remove('open'); detailBed = null; }
 let detailCssW = 0;
 function renderDetail() {
-  const g = STATE.gardens[detailBed], hour = nowHour();
+  const g = STATE.gardens[detailBed], hour = nowHour(), season = currentSeason();
   const W = Math.max(40, stripWidthFor(g.plants.length, DETAIL.spacing));
   const effW = Math.min((window.innerWidth || 560) - 40, 1200); // fill the laptop
   const S = Math.max(7, Math.min(12, Math.floor(effW / (DETAIL.spacing * 4))));
@@ -97,7 +98,7 @@ function renderDetail() {
   cv.width = W * S; cv.height = DETAIL.H * S;
   detailCssW = W * S;
   cv.style.width = detailCssW + 'px'; cv.style.height = 'auto';
-  drawGardenStrip(cv.getContext('2d'), S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, spacing: DETAIL.spacing, clip: false });
+  drawGardenStrip(cv.getContext('2d'), S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, season, spacing: DETAIL.spacing, clip: false });
   $('#detailStats').textContent = statLine(g);
   renderLedger();
   // measure after the panel has laid out, then park at the growing edge

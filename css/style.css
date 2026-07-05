@@ -14,6 +14,7 @@ html, body { background: var(--bg); color: var(--ink); font-family: var(--sans);
 .head { text-align: center; margin-bottom: 14px; }
 .epigraph { font-family: var(--voice); font-style: italic; font-size: 15px; line-height: 1.5; color: var(--muted); }
 .epigraph .by { display: block; font-style: normal; font-size: 12px; margin-top: 3px; }
+.season-tag { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
 
 .plots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 @media (min-width: 640px) { .plots { grid-template-columns: repeat(4, 1fr); } }

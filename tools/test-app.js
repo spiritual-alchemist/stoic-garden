@@ -33,7 +33,7 @@ function Elem(tag) {
   };
   return e;
 }
-const IDS = ['epigraph', 'plots', 'mirrorLine', 'dayPrev', 'dayNext', 'dayLabel', 'items', 'addItem', 'export', 'import', 'importFile',
+const IDS = ['epigraph', 'seasonTag', 'plots', 'mirrorLine', 'dayPrev', 'dayNext', 'dayLabel', 'items', 'addItem', 'export', 'import', 'importFile',
   'detail', 'detailBack', 'detailPrev', 'detailNext', 'detailTitle', 'detailGreek', 'detailCanvas', 'detailScroll', 'detailStats', 'detailLedger',
   'overlay', 'cClose', 'cHeading', 'cEffect', 'cTitle', 'cDesc', 'cPillar', 'cWeight', 'cOutcome', 'cSubList', 'cSubInput', 'cSubAdd', 'cSave', 'cDelete'];
 const byId = {}; IDS.forEach(id => byId[id] = Elem(id === 'detailCanvas' ? 'canvas' : 'div'));

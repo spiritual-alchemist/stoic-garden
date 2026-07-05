@@ -128,6 +128,11 @@ const EPIGRAPHS = [
   { text: 'Confine yourself to the present.', by: 'Marcus Aurelius' },
 ];
 
+// ---- seasons: a new one every week, straight off the clock (no bookkeeping) ----
+const SEASONS = ['spring', 'summer', 'monsoon', 'autumn', 'winter'];
+function weekIndex(d) { return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 / 7); }
+function currentSeason() { return SEASONS[((weekIndex(new Date()) % SEASONS.length) + SEASONS.length) % SEASONS.length]; }
+
 // ---- date helpers ----
 function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function todayStr() { return ymd(new Date()); }
