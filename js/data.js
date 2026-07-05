@@ -1,7 +1,7 @@
-// The garden's knowledge and its engine. The garden is not stored separately — it is
-// REPLAYED deterministically from your item log: each completed item rolls its own dice
-// (seeded from its id), so the forest is identical every time you open it, yet un-marking
-// or deleting an item just recomputes it correctly. Stable, and reversible for free.
+// The garden's knowledge and its engine. The garden is STORED, not replayed. Each task
+// records what its completion did (its "effect"); changing a task undoes its old effect
+// and applies the new one. Trees are reference-counted, so undo is local and lossless —
+// editing one task never disturbs the rest of the forest.
 
 const VIRTUES = [
   { key: 'wisdom',     label: 'Wisdom',     greek: 'sophia',     accent: '#8a6fd6' },
@@ -15,8 +15,7 @@ const WEIGHTS = { light: { value: 1, label: 'Light' }, notable: { value: 2, labe
 const WEIGHT_ORDER = ['light', 'notable', 'pivotal'];
 const OUTCOMES = { open: { label: 'Open' }, met: { label: 'Met it' }, fell_short: { label: 'Fell short' } };
 
-// Plant species — data, not bespoke art. Each is a recipe the renderer reads.
-// Distinct SILHOUETTES (broad / cone / slender / weeping / blossom), not just colors.
+// Distinct SILHOUETTES, not just colors.
 const SPECIES = [
   { key: 'oak',    shape: 'broad',   foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' } },
   { key: 'pine',   shape: 'cone',    foliage: { b: '#4e8a46', l: '#69a85e', d: '#2f5e2a' }, evergreen: true },
@@ -26,84 +25,88 @@ const SPECIES = [
 ];
 const SPECIES_BY_KEY = Object.fromEntries(SPECIES.map(s => [s.key, s]));
 
-// growth
 const MAX_MATURITY = 12;
-const GROW_NEW_PROB = 0.25; // ~75% grow an existing plant, ~25% plant a new sapling
+const GROW_NEW_PROB = 0.25; // ~75% grow an existing tree, ~25% plant a new one
 function weightValue(item) { return (WEIGHTS[item.weight] || WEIGHTS.notable).value; }
-function plantBaseMaturity(w) { return w; } // pivotal drops a sturdier sapling
 
-// maturity -> stage
+// ---- a tree's derived state (pure functions of its stored growth + harm) ----
+function plantMaturity(p) { return Math.min(MAX_MATURITY, p.growth); }
 function stageOf(m) { return m < 2 ? 'sprout' : m < 4 ? 'sapling' : m < 7 ? 'young' : m < 10 ? 'mature' : 'old'; }
-// harm needed to scar, by current maturity: young virtue is fragile, old virtue is tough
 function harmThreshold(m) { return m < 4 ? 2 : m < 7 ? 4 : 7; }
+function plantScarred(p) { return p.harm >= harmThreshold(plantMaturity(p)); }
+function plantDead(p) { return plantScarred(p) && p.harm > plantMaturity(p); } // harm overwhelmed it
 
-// ---- deterministic PRNG, seeded per item id ----
+// ---- ids + deterministic dice ----
+let _idc = 0;
+function makeId() { _idc = (_idc + 1) % 100000; return Date.now().toString(36) + '_' + _idc.toString(36) + Math.random().toString(36).slice(2, 5); }
 function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function makeRng(seedStr) {
   let a = hashStr(seedStr) || 1;
   return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-// ---- the replay: items -> gardens ----
-function completedInOrder(items) {
-  return items
-    .filter(i => i.outcome === 'met' || i.outcome === 'fell_short')
-    .slice()
-    .sort((a, b) => {
-      const ka = (a.resolvedDate || a.date), kb = (b.resolvedDate || b.date);
-      if (ka !== kb) return ka < kb ? -1 : 1;
-      if ((a.createdTs || 0) !== (b.createdTs || 0)) return (a.createdTs || 0) - (b.createdTs || 0);
-      return a.id < b.id ? -1 : 1;
-    });
-}
-
-function applyMet(g, item, w, rng) {
-  const growable = g.plants.filter(p => p.m < MAX_MATURITY);
-  const plantNew = g.plants.length === 0 || growable.length === 0 || rng() < GROW_NEW_PROB;
-  if (plantNew) {
-    const sp = SPECIES[Math.floor(rng() * SPECIES.length)];
-    g.plants.push({ id: item.id, species: sp.key, m: plantBaseMaturity(w), harm: 0, scarred: false, healed: false, seq: g.plants.length });
-  } else {
+// ---- apply / undo a task's effect on a stored garden (reference-counted) ----
+function applyEffect(garden, item, rng) {
+  const w = weightValue(item);
+  if (item.outcome === 'met') {
+    const growable = garden.plants.filter(p => plantMaturity(p) < MAX_MATURITY && !plantDead(p));
+    const plantNew = garden.plants.length === 0 || growable.length === 0 || rng() < GROW_NEW_PROB;
+    if (plantNew) {
+      const species = SPECIES[Math.floor(rng() * SPECIES.length)].key;
+      const id = makeId();
+      garden.plants.push({ id, species, growth: w, harm: 0, refs: 1 });
+      return { kind: 'plant', plantId: id, base: w };
+    }
     const p = growable[Math.floor(rng() * growable.length)];
-    p.m = Math.min(MAX_MATURITY, p.m + w);
-    if (p.scarred) p.healed = true; // fought back to it -> a marked veteran
+    p.growth += w; p.refs++;
+    return { kind: 'grow', plantId: p.id, amount: w };
   }
+  if (item.outcome === 'fell_short') {
+    if (garden.plants.length === 0) { garden.scorch++; return { kind: 'scorch' }; }
+    const p = garden.plants[Math.floor(rng() * garden.plants.length)];
+    p.harm += w; p.refs++;
+    return { kind: 'harm', plantId: p.id, amount: w };
+  }
+  return null;
+}
+function undoEffect(garden, eff) {
+  if (!eff) return;
+  if (eff.kind === 'scorch') { garden.scorch = Math.max(0, garden.scorch - 1); return; }
+  const p = garden.plants.find(x => x.id === eff.plantId);
+  if (!p) return; // already gone (its other refs were removed) — nothing to undo
+  if (eff.kind === 'plant') p.growth -= eff.base;
+  else if (eff.kind === 'grow') p.growth -= eff.amount;
+  else if (eff.kind === 'harm') p.harm -= eff.amount;
+  p.refs--;
+  if (p.refs <= 0) garden.plants = garden.plants.filter(x => x.id !== p.id);
 }
 
-function applyHarm(g, item, w, rng) {
-  if (g.plants.length === 0) { g.scorch += 1; return; } // failing a virtue you don't even tend
-  const p = g.plants[Math.floor(rng() * g.plants.length)];
-  p.harm += w;
-  if (!p.scarred && p.harm >= harmThreshold(p.m)) { p.scarred = true; p.healed = false; p.m = Math.max(0, p.m - 2); }
+function emptyGardens() { const g = {}; for (const v of VIRTUES) g[v.key] = { plants: [], scorch: 0 }; return g; }
+function completedInOrder(items) {
+  return items.filter(i => i.outcome === 'met' || i.outcome === 'fell_short').slice().sort((a, b) => {
+    const ka = a.resolvedDate || a.date, kb = b.resolvedDate || b.date;
+    if (ka !== kb) return ka < kb ? -1 : 1;
+    if ((a.createdTs || 0) !== (b.createdTs || 0)) return (a.createdTs || 0) - (b.createdTs || 0);
+    return a.id < b.id ? -1 : 1;
+  });
 }
-
-function buildGardens(items) {
-  const gardens = {};
-  for (const v of VIRTUES) gardens[v.key] = { plants: [], scorch: 0 };
-  for (const item of completedInOrder(items)) {
-    const g = gardens[item.pillar];
-    if (!g) continue;
-    const rng = makeRng(item.id);
-    const w = weightValue(item);
-    if (item.outcome === 'met') applyMet(g, item, w, rng);
-    else applyHarm(g, item, w, rng);
-  }
+// build the stored garden from scratch, stamping each item's effect (migration + import)
+function rebuildGardens(items) {
+  const gardens = emptyGardens();
+  for (const it of items) it.effect = null;
+  for (const it of completedInOrder(items)) it.effect = applyEffect(gardens[it.pillar], it, makeRng(it.id));
   return gardens;
 }
 
-// summaries for the field view and the mirror line
-function gardenDepth(g) { return g.plants.reduce((s, p) => s + p.m, 0); }
-function gardenSummary(g) {
-  return {
-    count: g.plants.length,
-    depth: gardenDepth(g),
-    scarred: g.plants.filter(p => p.scarred && !p.healed).length,
-    scorch: g.scorch,
-  };
+// ---- summaries ----
+function livingDepth(garden) { return garden.plants.filter(p => !plantDead(p)).reduce((s, p) => s + plantMaturity(p), 0); }
+function gardenStats(garden) {
+  let trees = 0, scars = garden.scorch;
+  for (const p of garden.plants) { if (plantDead(p)) scars++; else trees++; }
+  return { trees, scars };
 }
-
 function mirrorLine(gardens) {
-  const rows = VIRTUES.map(v => ({ label: v.label, depth: gardenDepth(gardens[v.key]) }));
+  const rows = VIRTUES.map(v => ({ label: v.label, depth: livingDepth(gardens[v.key]) }));
   const total = rows.reduce((s, r) => s + r.depth, 0);
   if (total < 3) return null;
   const sorted = rows.slice().sort((a, b) => b.depth - a.depth);
@@ -131,3 +134,4 @@ function todayStr() { return ymd(new Date()); }
 function parseYmd(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
 function addDays(s, n) { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); }
 function humanDate(s) { return parseYmd(s).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); }
+function shortDate(s) { return parseYmd(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }

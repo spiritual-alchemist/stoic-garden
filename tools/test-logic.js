@@ -1,64 +1,76 @@
-// Tests for the deterministic garden replay engine.
+// Tests for the stored-garden engine: apply/undo, reference counting, and — the whole
+// point — that editing one task leaves every other tree untouched (no reshuffle).
 const fs = require('fs');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'data.js'), 'utf8');
-const m = new Function(src + ';return {buildGardens,applyMet,applyHarm,harmThreshold,stageOf,gardenDepth,gardenSummary,mirrorLine,plantBaseMaturity,MAX_MATURITY,SPECIES,todayStr,addDays};')();
+const mem = {};
+global.localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
+const src = ['data.js', 'store.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')).join('\n;\n');
+const m = new Function(src + ';return {applyEffect,undoEffect,plantMaturity,plantScarred,plantDead,harmThreshold,rebuildGardens,emptyGardens,gardenStats,addItem,setOutcome,updateItem,removeItem,todayStr,addDays,VIRTUES};')();
 
 let pass = 0, fail = 0;
 const ok = (c, msg) => { if (c) pass++; else { fail++; console.log('  FAIL:', msg); } };
 const scripted = vals => { let i = 0; return () => vals[i++ % vals.length]; };
-function daysAgo(n) { return m.addDays(m.todayStr(), -n); }
-let seq = 0;
-function E(pillar, outcome, weight, opts) { seq++; return Object.assign({ id: 'i' + seq + Math.random().toString(36).slice(2), pillar, outcome, weight: weight || 'notable', date: daysAgo(30 - seq), resolvedDate: daysAgo(30 - seq), createdTs: seq }, opts); }
+const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'wisdom' }, o);
 
-// stage + threshold tables
-ok(m.stageOf(0) === 'sprout' && m.stageOf(3) === 'sapling' && m.stageOf(5) === 'young' && m.stageOf(8) === 'mature' && m.stageOf(11) === 'old', 'maturity -> stage');
-ok(m.harmThreshold(1) === 2 && m.harmThreshold(5) === 4 && m.harmThreshold(9) === 7, 'harm threshold rises with maturity');
+// apply: empty bed plants; existing bed can grow
+{ const g = { plants: [], scorch: 0 }; const e = m.applyEffect(g, I({}), scripted([0.1])); ok(g.plants.length === 1 && g.plants[0].growth === 2 && e.kind === 'plant', 'met on empty -> plants a tree'); }
+{ const g = { plants: [{ id: 'p', species: 'oak', growth: 3, harm: 0, refs: 1 }], scorch: 0 }; const e = m.applyEffect(g, I({}), scripted([0.9, 0.0])); ok(g.plants[0].growth === 5 && g.plants[0].refs === 2 && e.kind === 'grow', 'met can grow an existing tree'); }
 
-// applyMet: empty bed always plants
-{ const g = { plants: [], scorch: 0 }; m.applyMet(g, { id: 'a' }, 2, scripted([0.9])); ok(g.plants.length === 1 && g.plants[0].m === 2, 'first met plants a sapling sized by weight'); }
-// applyMet: grows an existing plant when the die says so
-{ const g = { plants: [{ id: 'p', m: 3, harm: 0, scarred: false, healed: false, seq: 0 }], scorch: 0 }; m.applyMet(g, { id: 'b' }, 2, scripted([0.9, 0.0])); ok(g.plants.length === 1 && g.plants[0].m === 5, 'met can grow an existing plant (3 + notable = 5)'); }
-// applyMet: all at max forces a new plant
-{ const g = { plants: [{ id: 'p', m: m.MAX_MATURITY, harm: 0, scarred: false, healed: false, seq: 0 }], scorch: 0 }; m.applyMet(g, { id: 'c' }, 3, scripted([0.5, 0.5])); ok(g.plants.length === 2, 'all plants maxed -> a met plants a new one (the garden expands)'); }
-// applyMet: growing a scarred plant heals it (marked veteran)
-{ const g = { plants: [{ id: 'p', m: 5, harm: 5, scarred: true, healed: false, seq: 0 }], scorch: 0 }; m.applyMet(g, { id: 'd' }, 2, scripted([0.9, 0.0])); ok(g.plants[0].healed === true, 'growing a scarred plant heals it into a veteran'); }
+// undo removes a solo tree
+{ const g = { plants: [{ id: 'p', species: 'oak', growth: 2, harm: 0, refs: 1 }], scorch: 0 }; m.undoEffect(g, { kind: 'plant', plantId: 'p', base: 2 }); ok(g.plants.length === 0, 'undo a plant with one ref removes it'); }
 
-// applyHarm: sapling scars easily; old tree resists three hits
-{ const g = { plants: [{ id: 'p', m: 3, harm: 0, scarred: false, healed: false, seq: 0 }], scorch: 0 }; m.applyHarm(g, { id: 'e' }, 2, scripted([0.0])); ok(g.plants[0].scarred === true, 'notable fell-short scars a sapling'); }
+// THE reference-count case: a tree grown by others survives undo of its planter
 {
-  const g = { plants: [{ id: 'p', m: 9, harm: 0, scarred: false, healed: false, seq: 0 }], scorch: 0 };
-  m.applyHarm(g, { id: 'f' }, 3, scripted([0.0])); ok(g.plants[0].scarred === false, 'one pivotal fell-short only dents an old tree');
-  m.applyHarm(g, { id: 'g' }, 3, scripted([0.0])); ok(g.plants[0].scarred === false, 'two pivotal fell-shorts still not scarred');
-  m.applyHarm(g, { id: 'h' }, 3, scripted([0.0])); ok(g.plants[0].scarred === true, 'three pivotal fell-shorts scar even an old tree (resists, not immune)');
+  const g = { plants: [], scorch: 0 };
+  const eA = m.applyEffect(g, I({}), scripted([0.1]));                 // A plants tree P
+  const eB = m.applyEffect(g, I({}), scripted([0.9, 0.0]));            // B grows P
+  ok(g.plants.length === 1 && g.plants[0].refs === 2, 'A plants, B grows -> one tree, 2 refs');
+  m.undoEffect(g, eA);                                                 // undo A (the planter)
+  ok(g.plants.length === 1 && g.plants[0].growth === 2, 'undoing the planter leaves the tree alive on B\'s growth (no data loss)');
+  m.undoEffect(g, eB);                                                 // undo B too
+  ok(g.plants.length === 0, 'once nothing references it, the tree is gone');
 }
-// applyHarm: failing an untended virtue leaves a scorch
-{ const g = { plants: [], scorch: 0 }; m.applyHarm(g, { id: 'k' }, 2, scripted([0.0])); ok(g.scorch === 1, 'fell-short on an empty bed leaves a scorch'); }
 
-// buildGardens: deterministic, and reversible by omission
+// harm scars and un-scars exactly
 {
-  const items = [E('wisdom', 'met', 'pivotal'), E('courage', 'met', 'notable'), E('wisdom', 'fell_short', 'notable'), E('wisdom', 'met', 'light')];
-  const a = JSON.stringify(m.buildGardens(items));
-  const b = JSON.stringify(m.buildGardens(items));
-  ok(a === b, 'buildGardens is deterministic (same log -> same forest)');
-  const single = [E('temperance', 'met', 'notable')];
-  ok(m.buildGardens(single).temperance.plants.length === 1, 'one met -> one plant');
-  ok(m.buildGardens([]).temperance.plants.length === 0, 'removing it (empty log) -> bare bed (reversible)');
+  const g = { plants: [{ id: 'p', species: 'oak', growth: 3, harm: 0, refs: 1 }], scorch: 0 };
+  const e = m.applyEffect(g, I({ outcome: 'fell_short' }), scripted([0.0]));
+  ok(m.plantScarred(g.plants[0]) === true && g.plants[0].refs === 2, 'fell short scars a sapling');
+  m.undoEffect(g, e);
+  ok(m.plantScarred(g.plants[0]) === false && g.plants[0].refs === 1, 'undoing the harm un-scars it exactly');
 }
-// fill-then-mature keeps plant count bounded well under the number of mets
+{ const g = { plants: [], scorch: 0 }; const e = m.applyEffect(g, I({ outcome: 'fell_short' }), scripted([0])); m.undoEffect(g, e); ok(g.scorch === 0, 'scorch on empty bed, then undone'); }
+
+// ---- the no-reshuffle guarantee, through the real store ----
+function growthMap(garden) { const o = {}; for (const p of garden.plants) o[p.id] = p.growth; return o; }
 {
-  const items = []; for (let i = 0; i < 30; i++) items.push(E('courage', 'met', 'pivotal'));
-  const g = m.buildGardens(items).courage;
-  ok(g.plants.length >= 1 && g.plants.length < 30, `30 mets -> ${g.plants.length} plants (bounded), depth ${m.gardenDepth(g)}`);
-  ok(m.gardenDepth(g) > 20, 'sustained practice builds real depth');
+  let seq = 0;
+  const st = { version: 4, items: [], gardens: m.emptyGardens() };
+  const add = (w) => { seq++; m.addItem(st, { title: 't' + seq, pillar: 'wisdom', weight: w, outcome: 'met', date: m.addDays(m.todayStr(), -20 + seq) }); return st.items[st.items.length - 1]; };
+  const a = add('notable'), b = add('pivotal'), c = add('notable'), d = add('light'), e2 = add('pivotal');
+  const before = growthMap(st.gardens.wisdom);
+  const target = b.effect ? b.effect.plantId : null;
+
+  m.setOutcome(st, b.id, 'fell_short'); // flip ONE task
+  const after = growthMap(st.gardens.wisdom);
+  let stable = true;
+  for (const id in before) { if (id === target) continue; if (!(id in after) || after[id] !== before[id]) stable = false; }
+  ok(stable, 'flipping one task met->fell_short leaves every OTHER tree identical (no reshuffle)');
+  ok(b.effect && (b.effect.kind === 'harm' || b.effect.kind === 'scorch'), 'the flipped task now carries a harm/scorch effect');
+
+  m.setOutcome(st, b.id, 'met'); // flip it back
+  const back = growthMap(st.gardens.wisdom);
+  let stable2 = true;
+  for (const id in before) { if (id === target) continue; if (!(id in back) || back[id] !== before[id]) stable2 = false; }
+  ok(stable2, 'flipping back to met still leaves the other trees untouched');
 }
-// mirror names deepest grove vs bare ground
+
+// stats are human-countable
 {
-  const items = [];
-  for (let i = 0; i < 6; i++) items.push(E('wisdom', 'met', 'pivotal'));
-  items.push(E('courage', 'met', 'light'));
-  const line = m.mirrorLine(m.buildGardens(items));
-  ok(line && /wisdom/i.test(line) && /bare/i.test(line), 'mirror line: "' + line + '"');
+  const st = { version: 4, items: [], gardens: m.emptyGardens() };
+  for (let i = 0; i < 4; i++) m.addItem(st, { title: 'x', pillar: 'courage', weight: 'notable', outcome: 'met', date: m.addDays(m.todayStr(), -i) });
+  const s = m.gardenStats(st.gardens.courage);
+  ok(s.trees >= 1 && s.scars === 0, `courage: ${s.trees} trees, ${s.scars} scars`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

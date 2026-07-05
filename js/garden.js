@@ -104,11 +104,13 @@ function drawScarred(b, m) {
   [[-2, 0], [2, 0], [-3, 0], [3, 0]].forEach(o => b(o[0], o[1], GC.scorch));
 }
 
-function drawPlant(b, spKey, m, scarred, healed) {
+// maturity + harm -> living tree, marked veteran, or overwhelmed dead tree
+function drawPlant(b, spKey, m, harm) {
   const sp = SPECIES_BY_KEY[spKey] || SPECIES[0];
   const fo = sp.foliage;
-  if (scarred && !healed) return drawScarred(b, m);
-  if (stageOf(m) === 'sprout') { drawSprout(b, fo, sp.blossom); return; }
+  const scarred = harm >= harmThreshold(m);
+  if (scarred && harm > m) return drawScarred(b, m); // harm overwhelmed it
+  if (stageOf(m) === 'sprout') { drawSprout(b, fo, sp.blossom); if (scarred) scarMark(b, 3); return; }
   switch (sp.shape) {
     case 'cone': drawCone(b, m, fo); break;
     case 'blossom': drawBlossom(b, m, fo, sp.blossom); break;
@@ -116,7 +118,7 @@ function drawPlant(b, spKey, m, scarred, healed) {
     case 'willow': drawWillow(b, m, fo); break;
     default: drawBroad(b, m, fo);
   }
-  if (scarred && healed) scarMark(b, m);
+  if (scarred) scarMark(b, m); // survived, but marked — a veteran
 }
 
 // ---- a bed's garden into a canvas ----
@@ -130,7 +132,7 @@ function drawGardenStrip(ctx, S, opts) {
     const cx = x0 + i * spacing;
     if (clip && cx > W - 3) break;
     const p = plants[i];
-    drawPlant(brushAt(ctx, S, cx, GY - 1), p.species, p.m, p.scarred, p.healed);
+    drawPlant(brushAt(ctx, S, cx, GY - 1), p.species, plantMaturity(p), p.harm);
   }
 }
 

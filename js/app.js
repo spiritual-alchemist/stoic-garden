@@ -2,7 +2,6 @@
 // garden and pan it, and the daily item log below that drives everything.
 
 let STATE = loadState();
-let GARDENS = {};
 let currentDay = todayStr();
 let detailBed = null;
 const composer = { id: null, weight: 'notable', outcome: 'open', subtasks: [] };
@@ -11,7 +10,7 @@ const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
 const nowHour = () => new Date().getHours();
 
-const FIELD = { W: 60, H: 34, GY: 26, S: 4, spacing: 9 };
+const FIELD = { W: 64, H: 36, GY: 27, S: 5, spacing: 9 };
 const DETAIL = { H: 28, GY: 20, spacing: 16 };
 
 function init() {
@@ -46,7 +45,6 @@ function epigraphHtml() {
 }
 
 function renderAll() {
-  GARDENS = buildGardens(STATE.items);
   renderField();
   renderDay();
   if (detailBed) renderDetail();
@@ -70,12 +68,12 @@ function buildPlots() {
 function renderField() {
   const hour = nowHour();
   VIRTUES.forEach(v => {
-    const g = GARDENS[v.key], ref = PLOT_REFS[v.key]; if (!ref) return;
+    const g = STATE.gardens[v.key], ref = PLOT_REFS[v.key]; if (!ref) return;
     drawGardenStrip(ref.canvas.getContext('2d'), FIELD.S, { W: FIELD.W, H: FIELD.H, GY: FIELD.GY, plants: g.plants, scorch: g.scorch, hour, spacing: FIELD.spacing, clip: true });
-    const s = gardenSummary(g);
-    ref.name.textContent = v.label + (s.scarred ? ' · scarred' : '');
+    const s = gardenStats(g);
+    ref.name.textContent = v.label + (s.scars ? ` · ${s.scars} scar${s.scars > 1 ? 's' : ''}` : '');
   });
-  const line = mirrorLine(GARDENS);
+  const line = mirrorLine(STATE.gardens);
   $('#mirrorLine').textContent = line || '';
   $('#mirrorLine').style.display = line ? '' : 'none';
 }
@@ -91,20 +89,30 @@ function openDetail(bed) {
 function closeDetail() { $('#detail').classList.remove('open'); detailBed = null; }
 let detailCssW = 0;
 function renderDetail() {
-  const g = GARDENS[detailBed], hour = nowHour();
+  const g = STATE.gardens[detailBed], hour = nowHour();
   const W = Math.max(40, stripWidthFor(g.plants.length, DETAIL.spacing));
-  const effW = Math.min((window.innerWidth || 560) - 28, 620);
-  const S = Math.max(7, Math.min(10, Math.floor(effW / (DETAIL.spacing * 4)))); // ~4 plants in view
+  const effW = Math.min((window.innerWidth || 560) - 40, 1200); // fill the laptop
+  const S = Math.max(7, Math.min(12, Math.floor(effW / (DETAIL.spacing * 4))));
   const cv = $('#detailCanvas');
   cv.width = W * S; cv.height = DETAIL.H * S;
   detailCssW = W * S;
   cv.style.width = detailCssW + 'px'; cv.style.height = 'auto';
   drawGardenStrip(cv.getContext('2d'), S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, spacing: DETAIL.spacing, clip: false });
-  const s = gardenSummary(g);
-  $('#detailStats').textContent = g.plants.length ? `${g.plants.length} plants · depth ${s.depth}${s.scarred ? ` · ${s.scarred} scarred` : ''}` : 'bare ground — meet this virtue to plant it';
+  $('#detailStats').textContent = statLine(g);
   renderLedger();
   // measure after the panel has laid out, then park at the growing edge
   setTimeout(() => { const sc = $('#detailScroll'); if (sc && detailCssW > sc.clientWidth) sc.scrollLeft = sc.scrollWidth; updateDetailArrows(); }, 80);
+}
+// human-readable, no mystery numbers
+function statLine(g) {
+  const s = gardenStats(g);
+  if (!s.trees && !s.scars) return 'bare ground — meet this virtue to plant it';
+  const evs = STATE.items.filter(i => i.pillar === detailBed && (i.outcome === 'met' || i.outcome === 'fell_short'));
+  const first = evs.length ? evs.map(e => e.resolvedDate || e.date).sort()[0] : null;
+  const parts = [`${s.trees} ${s.trees === 1 ? 'tree' : 'trees'}`];
+  if (s.scars) parts.push(`${s.scars} ${s.scars === 1 ? 'scar' : 'scars'}`);
+  if (first) parts.push(`tended since ${shortDate(first)}`);
+  return parts.join(' · ');
 }
 // the grove's history: the events that grew or scarred it, newest first
 function renderLedger() {

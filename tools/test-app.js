@@ -53,9 +53,9 @@ const mem = {};
 global.localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
 global.location = { origin: 'http://localhost' };
 
-const combined = ['data.js', 'store.js', 'garden.js', 'app.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')).join('\n;\n') + '\n;globalThis.getGARDENS=function(){return GARDENS;};';
+const combined = ['data.js', 'store.js', 'garden.js', 'app.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')).join('\n;\n') + '\n;globalThis.getS=function(){return STATE;};';
 new Function(combined)();
-const G = () => getGARDENS();
+const G = () => getS().gardens;
 
 try {
   document._fire('DOMContentLoaded');
@@ -68,7 +68,7 @@ try {
   byId.cPillar.value = 'courage';
   byId.cWeight.dispatch('click', { target: byId.cWeight.children[2] });
   byId.cSave.click();
-  ok(JSON.parse(mem['stoic-garden-v3']).items.length === 1, 'item saved');
+  ok(JSON.parse(mem['stoic-garden-v4']).items.length === 1, 'item saved');
   ok(G().courage.plants.length === 0, 'open item plants nothing');
 
   // mark met via the compact toggle -> a plant appears
@@ -89,7 +89,7 @@ try {
   // open the courage plot -> detail view renders without error
   byId.plots.children[2].click();
   ok(byId.detail.classList.contains('open'), 'tapping a plot opens the detail garden');
-  ok(/plants|depth/.test(byId.detailStats._text), 'detail shows garden stats: "' + byId.detailStats._text + '"');
+  ok(/tree|bare/.test(byId.detailStats._text), 'detail shows garden stats: "' + byId.detailStats._text + '"');
   byId.detailBack.click();
   ok(!byId.detail.classList.contains('open'), 'back returns to the field');
 
@@ -100,7 +100,7 @@ try {
   // delete via editor
   card = byId.items.children.find(c => c.classList.contains('item'));
   card.click(); byId.cDelete.click();
-  ok(JSON.parse(mem['stoic-garden-v3']).items.length === 0 && G().courage.plants.length === 0, 'delete removes item and its plant');
+  ok(JSON.parse(mem['stoic-garden-v4']).items.length === 0 && G().courage.plants.length === 0, 'delete removes item and its plant');
 } catch (e) {
   fail++; console.log('  THREW:', e.message, '\n', (e.stack || '').split('\n').slice(1, 5).join('\n'));
 }

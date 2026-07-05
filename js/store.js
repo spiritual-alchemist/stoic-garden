@@ -1,16 +1,34 @@
-// Local-first storage. Only the item log is stored — the garden is replayed from it.
-const STORE_KEY = 'stoic-garden-v3';
+// Local-first storage. The garden is STORED alongside the item log. Every change to a
+// task reconciles the garden: undo the task's old effect, apply its new one. Nothing else.
+
+const STORE_KEY = 'stoic-garden-v4';
+const STORE_KEY_V3 = 'stoic-garden-v3';
 const STORE_KEY_V2 = 'stoic-garden-v2';
 
-function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-
 function loadState() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); if (!s.items) s.items = []; return s; } } catch (_) {}
-  // carry v2 items forward — same shape, the garden derives from them
-  try { const raw = localStorage.getItem(STORE_KEY_V2); if (raw) { const old = JSON.parse(raw); const s = { version: 3, items: old.items || [] }; saveState(s); return s; } } catch (_) {}
-  return { version: 3, items: [] };
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); return ensure(s); } } catch (_) {}
+  // migrate older item logs forward and build the garden from them
+  for (const k of [STORE_KEY_V3, STORE_KEY_V2]) {
+    try { const raw = localStorage.getItem(k); if (raw) { const old = JSON.parse(raw); const s = ensure({ version: 4, items: old.items || [] }); saveState(s); return s; } } catch (_) {}
+  }
+  return { version: 4, items: [], gardens: emptyGardens() };
+}
+function ensure(s) {
+  if (!s.items) s.items = [];
+  if (!s.gardens) s.gardens = rebuildGardens(s.items); // (re)build if missing
+  return s;
 }
 function saveState(state) { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+// undo the task's previous effect, then apply its current one
+function reconcile(state, item, prevPillar, prevEffect) {
+  if (prevEffect && state.gardens[prevPillar]) undoEffect(state.gardens[prevPillar], prevEffect);
+  if (item.outcome === 'met' || item.outcome === 'fell_short') {
+    item.effect = applyEffect(state.gardens[item.pillar], item, makeRng(item.id));
+  } else {
+    item.effect = null;
+  }
+}
 
 function newItem(f) {
   const now = Date.now(), outcome = f.outcome || 'open';
@@ -18,17 +36,39 @@ function newItem(f) {
     id: makeId(), date: f.date || todayStr(), title: (f.title || '').trim(), desc: (f.desc || '').trim(),
     pillar: f.pillar || VIRTUES[0].key, weight: f.weight || 'notable', outcome,
     subtasks: f.subtasks || [], resolvedDate: outcome === 'open' ? null : (f.date || todayStr()),
-    createdTs: now, updatedTs: now,
+    createdTs: now, updatedTs: now, effect: null,
   };
 }
-function addItem(state, f) { state.items.push(newItem(f)); saveState(state); return state; }
-function updateItem(state, id, patch) { const it = state.items.find(x => x.id === id); if (it) { Object.assign(it, patch, { updatedTs: Date.now() }); saveState(state); } return state; }
-function setOutcome(state, id, outcome) {
-  const it = state.items.find(x => x.id === id);
-  if (it) { it.outcome = outcome; it.resolvedDate = outcome === 'open' ? null : todayStr(); it.updatedTs = Date.now(); saveState(state); }
+function addItem(state, f) {
+  const item = newItem(f);
+  state.items.push(item);
+  reconcile(state, item, item.pillar, null);
+  saveState(state);
   return state;
 }
-function removeItem(state, id) { state.items = state.items.filter(x => x.id !== id); saveState(state); return state; }
+function setOutcome(state, id, outcome) {
+  const it = state.items.find(x => x.id === id); if (!it) return state;
+  const prevEffect = it.effect, prevPillar = it.pillar;
+  it.outcome = outcome; it.resolvedDate = outcome === 'open' ? null : todayStr(); it.updatedTs = Date.now();
+  reconcile(state, it, prevPillar, prevEffect);
+  saveState(state);
+  return state;
+}
+function updateItem(state, id, patch) {
+  const it = state.items.find(x => x.id === id); if (!it) return state;
+  const prevEffect = it.effect, prevPillar = it.pillar, prevW = it.weight, prevO = it.outcome;
+  Object.assign(it, patch, { updatedTs: Date.now() });
+  if (it.pillar !== prevPillar || it.weight !== prevW || it.outcome !== prevO) reconcile(state, it, prevPillar, prevEffect);
+  saveState(state);
+  return state;
+}
+function removeItem(state, id) {
+  const it = state.items.find(x => x.id === id);
+  if (it && it.effect && state.gardens[it.pillar]) undoEffect(state.gardens[it.pillar], it.effect);
+  state.items = state.items.filter(x => x.id !== id);
+  saveState(state);
+  return state;
+}
 function toggleSubtask(state, id, subId) {
   const it = state.items.find(x => x.id === id); if (!it) return state;
   const st = (it.subtasks || []).find(s => s.id === subId);
@@ -51,6 +91,7 @@ function importState(file) {
         if (!Array.isArray(incoming)) throw new Error('Not a garden file');
         const cur = loadState(), seen = new Set(cur.items.map(i => i.id));
         for (const i of incoming) if (!seen.has(i.id)) cur.items.push(i);
+        cur.gardens = rebuildGardens(cur.items); // recompute from the merged log
         saveState(cur); resolve(cur);
       } catch (err) { reject(err); }
     };
