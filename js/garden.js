@@ -34,7 +34,9 @@ function drawSceneBg(ctx, S, W, H, GY, hour, season) {
   P(0, 0, sky.top, W, GY); P(0, GY - 6, sky.mid, W, 6);
   // celestial
   if (sky.kind === 'night') {
-    for (let i = 0; i < Math.floor(W / 9); i++) { const sx = (i * 61) % (W - 2) + 1, sy = (i * 29) % (GY - 10) + 2; P(sx, sy, '#dfe4ee'); }
+    ctx.fillStyle = '#dfe4ee';
+    const nst = Math.min(46, Math.round(W * S / 16)), sh = Math.max(4, (GY - 8) * S);
+    for (let i = 0; i < nst; i++) ctx.fillRect(Math.round(((i * 733 + 131) % 997) / 997 * W * S), Math.round(((i * 419 + 71) % 991) / 991 * sh) + S, 2, 2);
     const mx = W - 9; P(mx, 6, '#e9edf4', 3, 3); P(mx - 1, 7, '#cfd6e2'); P(mx + 2, 8, '#cfd6e2');
   } else if (sky.overcast) {
     [[Math.floor(W * 0.2), 6], [Math.floor(W * 0.6), 5], [Math.floor(W * 0.8), 7]].forEach(c => { P(c[0], c[1], '#c8cfd4', 6, 2); P(c[0] + 1, c[1] - 1, '#c8cfd4', 4, 1); });
@@ -146,13 +148,15 @@ function drawPlant(b, spKey, m, harm, season) {
   if (scarred) scarMark(b, m);
 }
 
-// deterministic weather scatter across the sky (no flicker)
+// deterministic weather — drawn at a fixed FINE device size so it stays delicate at any
+// zoom (a 1px particle scaled by S would be a giant block in the expanded view).
 function drawWeather(ctx, S, W, GY, season) {
-  const P = (x, y, c, w, h) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x * S), Math.round(y * S), (w || 1) * S, (h || 1) * S); };
-  if (season === 'spring') { for (let i = 0; i < Math.floor(W / 5); i++) P((i * 37 + 3) % W, (i * 23 + 2) % (GY - 2), '#f2a8c8'); }
-  else if (season === 'monsoon') { for (let i = 0; i < Math.floor(W * 0.5); i++) P((i * 17 + 2) % W, (i * 11) % (GY - 2), '#aeb9c0', 1, 2); }
-  else if (season === 'autumn') { for (let i = 0; i < Math.floor(W / 5); i++) P((i * 41 + 4) % W, (i * 19 + 1) % (GY - 2), (i % 2) ? '#cf7a2a' : '#9c4a1e'); }
-  else if (season === 'winter') { for (let i = 0; i < Math.floor(W * 0.45); i++) P((i * 29 + 5) % W, (i * 13) % (GY + 1), '#ffffff'); }
+  const pw = W * S, ph = Math.max(4, (GY - 1) * S), area = pw * ph;
+  const scatter = (n, fn) => { for (let i = 0; i < n; i++) fn(Math.round(((i * 733 + 131) % 997) / 997 * pw), Math.round(((i * 419 + 71) % 991) / 991 * ph)); };
+  if (season === 'spring') { ctx.fillStyle = '#f2a8c8'; scatter(Math.min(70, Math.round(area / 5000)), (x, y) => ctx.fillRect(x, y, 3, 3)); }
+  else if (season === 'monsoon') { ctx.fillStyle = '#c6d0d6'; scatter(Math.min(150, Math.round(area / 2600)), (x, y) => ctx.fillRect(x, y, 2, 7)); }
+  else if (season === 'autumn') { scatter(Math.min(60, Math.round(area / 5000)), (x, y) => { ctx.fillStyle = ((x + y) % 2) ? '#cf7a2a' : '#9c4a1e'; ctx.fillRect(x, y, 3, 3); }); }
+  else if (season === 'winter') { ctx.fillStyle = '#ffffff'; scatter(Math.min(150, Math.round(area / 2600)), (x, y) => ctx.fillRect(x, y, 3, 3)); }
 }
 
 function drawGardenStrip(ctx, S, opts) {
