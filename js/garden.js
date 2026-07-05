@@ -195,33 +195,48 @@ function drawWeatherAnim(ctx, pw, ph, season, t) {
   }
 }
 
-// birds gliding by day (drawn in LOGICAL px so they scale with the scene, not stay
-// insect-sized in the big view); fireflies are small fixed glows on spring/summer nights.
-function drawWildlife(ctx, W, GY, S, season, hour, t) {
+// five bird silhouettes (cell offsets, wings-up / wings-down frames)
+const BIRD_TYPES = [
+  { color: '#3f372f', rate: 5, up: [[0, 0], [-1, -1], [1, -1], [-2, 0], [2, 0]], down: [[0, 1], [-1, 0], [1, 0], [-2, 1], [2, 1]] },                       // gull
+  { color: '#2f2a24', rate: 9, up: [[0, 0], [-1, -1], [1, -1], [-2, -1], [2, -1], [0, 1]], down: [[0, 0], [-1, 0], [1, 0], [-2, -1], [2, -1], [0, 1]] },   // swallow
+  { color: '#5a4a38', rate: 12, up: [[0, 0], [-1, -1], [1, -1]], down: [[0, 0], [-1, 0], [1, 0]] },                                                       // sparrow
+  { color: '#241f1b', rate: 4, up: [[0, 0], [-1, -1], [1, -1], [-2, -1], [2, -1], [-3, 0], [3, 0]], down: [[0, 1], [-1, 0], [1, 0], [-2, 0], [2, 0], [-3, 1], [3, 1]] }, // crow
+  { color: '#6a6258', rate: 6, up: [[-1, -1], [0, 0], [1, -1]], down: [[-1, 0], [0, 1], [1, 0]] },                                                        // distant V
+];
+function _brnd(k, salt) { let h = Math.imul(((k * 374761393) ^ (salt * 668265263)) ^ 0x9e3779b9, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0; return h / 4294967296; }
+
+// wildlife: fireflies at night; by day, pseudo-random bird FLYBYS — 0 to 2 on screen at a
+// time, five kinds, smaller on the small plots. Birds enter, cross, and leave; no state.
+function drawWildlife(ctx, W, GY, S, season, hour, t, seed) {
   const night = hour < 5 || hour >= 20;
   if (night) {
     if (season === 'spring' || season === 'summer') {
-      const pw = W * S, gpx = GY * S;
-      ctx.fillStyle = '#f6e9a0';
-      for (let i = 0; i < 5; i++) {
-        const x = (((i * 311 + 40) + t * 8 * (i % 2 ? 1 : -1)) % pw + pw) % pw;
-        const y = gpx * 0.45 + Math.sin(t * 0.6 + i) * gpx * 0.16;
-        ctx.globalAlpha = Math.sin(t * 3 + i * 2) > 0 ? 1 : 0.3;
-        ctx.fillRect(Math.round(x), Math.round(y), 3, 3);
-      }
+      const pw = W * S, gpx = GY * S; ctx.fillStyle = '#f6e9a0';
+      for (let i = 0; i < 5; i++) { const x = (((i * 311 + 40) + t * 8 * (i % 2 ? 1 : -1)) % pw + pw) % pw; const y = gpx * 0.45 + Math.sin(t * 0.6 + i) * gpx * 0.16; ctx.globalAlpha = Math.sin(t * 3 + i * 2) > 0 ? 1 : 0.3; ctx.fillRect(Math.round(x), Math.round(y), 3, 3); }
       ctx.globalAlpha = 1;
     }
-  } else if (season !== 'monsoon') {
-    const px = (lx, ly) => { ctx.fillRect(Math.round(lx * S), Math.round(ly * S), S, S); };
-    ctx.fillStyle = '#3f372f';
-    for (let i = 0; i < 2; i++) {
-      const lx = ((t * (i ? 2.4 : 1.9) + i * W * 0.5) % (W + 8)) - 4;
-      const ly = GY * 0.22 + Math.sin(t * 0.5 + i) * GY * 0.06;
-      const up = Math.sin(t * 6 + i) > 0; // wing beat
-      px(lx, ly); // body
-      px(lx - 1, ly + (up ? -1 : 0)); px(lx + 1, ly + (up ? -1 : 0)); // inner wings
-      px(lx - 2, ly + (up ? 0 : 1)); px(lx + 2, ly + (up ? 0 : 1)); // outer wingtips
-    }
+    return;
+  }
+  if (season === 'monsoon') return;
+  const cell = Math.max(3, Math.min(8, S <= 5 ? 3 : S)); // smaller on the field thumbnails
+  const GAP = 6, Dbase = 7, base = (seed || 0) * 101 + season.charCodeAt(0), nowK = Math.floor(t / GAP);
+  const active = [];
+  for (let k = nowK - 2; k <= nowK; k++) {
+    const kk = k + base;
+    if (_brnd(kk, 1) >= 0.6) continue; // ~60% of slots spawn a bird
+    const startT = k * GAP + _brnd(kk, 2) * GAP * 0.5, D = Dbase * (0.8 + _brnd(kk, 3) * 0.7);
+    const prog = (t - startT) / D;
+    if (prog < 0 || prog > 1) continue;
+    const dir = _brnd(kk, 4) < 0.5 ? 1 : -1;
+    const lx = dir > 0 ? (-3 + prog * (W + 6)) : (W + 3 - prog * (W + 6));
+    const ly = GY * (0.1 + _brnd(kk, 5) * 0.34) + Math.sin(t * 0.6 + k) * GY * 0.03;
+    active.push({ lx, ly, ty: Math.floor(_brnd(kk, 6) * BIRD_TYPES.length), kk });
+  }
+  active.sort((a, b) => a.kk - b.kk);
+  for (let i = 0; i < Math.min(2, active.length); i++) {
+    const b = active[i], T = BIRD_TYPES[b.ty], frame = Math.sin(t * T.rate + b.kk) > 0 ? T.up : T.down;
+    const bx = b.lx * S, by = b.ly * S; ctx.fillStyle = T.color;
+    for (const o of frame) ctx.fillRect(Math.round(bx + o[0] * cell), Math.round(by + o[1] * cell), cell, cell);
   }
 }
 
@@ -229,7 +244,7 @@ function drawWildlife(ctx, W, GY, S, season, hour, t) {
 const _gviews = new Set();
 let _ganim = false, _glast = 0;
 function gardenViewAttach(canvas, getOpts) {
-  const v = { canvas, ctx: canvas.getContext('2d'), getOpts, bg: document.createElement('canvas'), key: '' };
+  const v = { canvas, ctx: canvas.getContext('2d'), getOpts, bg: document.createElement('canvas'), key: '', seed: _gviews.size };
   _gviews.add(v);
   if (!_ganim) { _ganim = true; requestAnimationFrame(_gloop); }
   return v;
@@ -258,7 +273,7 @@ function _gdraw(v, t) {
     drawPlant(windyBrush(ctx, S, cx, GY - 1, sway), p.species, plantMaturity(p), p.harm, season);
   }
   drawWeatherAnim(ctx, cw, Math.max(4, (GY - 1) * S), season, t);
-  drawWildlife(ctx, W, GY, S, season, hour, t);
+  drawWildlife(ctx, W, GY, S, season, hour, t, v.seed);
 }
 
 function stripWidthFor(plantCount, spacing) { return 6 + Math.max(1, plantCount) * spacing + 6; }
