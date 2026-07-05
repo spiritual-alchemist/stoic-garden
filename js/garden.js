@@ -171,30 +171,90 @@ function drawPlant(b, spKey, m, harm, season) {
   if (scarred) scarMark(b, m);
 }
 
-// deterministic weather — drawn at a fixed FINE device size so it stays delicate at any
-// zoom (a 1px particle scaled by S would be a giant block in the expanded view).
-function drawWeather(ctx, S, W, GY, season) {
-  const pw = W * S, ph = Math.max(4, (GY - 1) * S), area = pw * ph;
-  const scatter = (n, fn) => { for (let i = 0; i < n; i++) fn(Math.round(((i * 733 + 131) % 997) / 997 * pw), Math.round(((i * 419 + 71) % 991) / 991 * ph)); };
-  if (season === 'spring') { ctx.fillStyle = '#f2a8c8'; scatter(Math.min(70, Math.round(area / 5000)), (x, y) => ctx.fillRect(x, y, 3, 3)); }
-  else if (season === 'monsoon') { ctx.fillStyle = '#c6d0d6'; scatter(Math.min(150, Math.round(area / 2600)), (x, y) => ctx.fillRect(x, y, 2, 7)); }
-  else if (season === 'autumn') { scatter(Math.min(60, Math.round(area / 5000)), (x, y) => { ctx.fillStyle = ((x + y) % 2) ? '#cf7a2a' : '#9c4a1e'; ctx.fillRect(x, y, 3, 3); }); }
-  else if (season === 'winter') { ctx.fillStyle = '#ffffff'; scatter(Math.min(150, Math.round(area / 2600)), (x, y) => ctx.fillRect(x, y, 3, 3)); }
+// a brush whose canopy pixels lean with the wind (trunk stays put)
+function windyBrush(ctx, S, cx, gy, sway) {
+  return (dx, dy, color, w, h) => {
+    const off = (-dy) > 3 ? sway : 0;
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round((cx + dx + off) * S), Math.round((gy + dy) * S), (w || 1) * S, (h || 1) * S);
+  };
 }
 
-function drawGardenStrip(ctx, S, opts) {
-  const { W, H, GY, plants, scorch, hour, season, spacing, clip } = opts;
-  ctx.imageSmoothingEnabled = false;
-  drawSceneBg(ctx, S, W, H, GY, hour, season);
-  for (let i = 0; i < Math.min(scorch || 0, 6); i++) { ctx.fillStyle = season === 'winter' ? GC.snowD : GC.scorch; ctx.fillRect((8 + i * 7) * S, GY * S, 3 * S, 1 * S); }
-  const x0 = 6;
-  for (let i = 0; i < plants.length; i++) {
-    const cx = x0 + i * spacing;
-    if (clip && cx > W - 3) break;
-    const p = plants[i];
-    drawPlant(brushAt(ctx, S, cx, GY - 1), p.species, plantMaturity(p), p.harm, season);
+// falling weather, animated by time t (seconds). Fixed fine device sizes, particles wrap.
+function drawWeatherAnim(ctx, pw, ph, season, t) {
+  if (season === 'summer') return;
+  const dense = (season === 'monsoon' || season === 'winter');
+  const N = Math.min(dense ? 150 : 60, Math.round(pw * ph / (dense ? 2600 : 5000)));
+  const H = ph + 10;
+  for (let i = 0; i < N; i++) {
+    const bx = ((i * 733 + 131) % 997) / 997 * pw, ph0 = ((i * 419 + 71) % 991) / 991;
+    if (season === 'monsoon') { const y = (ph0 * H + t * 230) % H; ctx.fillStyle = '#c6d0d6'; ctx.fillRect(Math.round(bx + (y / H) * 5), Math.round(y - 7), 2, 8); }
+    else if (season === 'winter') { const y = (ph0 * H + t * 34) % H; ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(bx + Math.sin(t * 0.8 + i) * 6), Math.round(y), 3, 3); }
+    else if (season === 'spring') { const y = (ph0 * H + t * 26) % H; ctx.fillStyle = '#f2a8c8'; ctx.fillRect(Math.round(bx + Math.sin(t * 1.1 + i) * 10), Math.round(y), 3, 3); }
+    else if (season === 'autumn') { const y = (ph0 * H + t * 42) % H; ctx.fillStyle = (i % 2) ? '#cf7a2a' : '#9c4a1e'; ctx.fillRect(Math.round(bx + Math.sin(t * 1.4 + i) * 9), Math.round(y), 3, 3); }
   }
-  drawWeather(ctx, S, W, GY, season);
+}
+
+// birds gliding by day, fireflies blinking on spring/summer nights
+function drawWildlife(ctx, pw, gpx, season, hour, t) {
+  const night = hour < 5 || hour >= 20;
+  if (night) {
+    if (season === 'spring' || season === 'summer') {
+      ctx.fillStyle = '#f6e9a0';
+      for (let i = 0; i < 5; i++) {
+        const x = (((i * 311 + 40) + t * 8 * (i % 2 ? 1 : -1)) % pw + pw) % pw;
+        const y = gpx * 0.42 + Math.sin(t * 0.6 + i) * gpx * 0.16;
+        ctx.globalAlpha = Math.sin(t * 3 + i * 2) > 0 ? 1 : 0.25;
+        ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
+  } else if (season !== 'monsoon') {
+    ctx.fillStyle = '#4a4038';
+    for (let i = 0; i < 2; i++) {
+      const x = (t * (i ? 30 : 24) + i * pw * 0.5) % (pw + 40) - 20;
+      const y = gpx * 0.22 + Math.sin(t * 0.5 + i) * gpx * 0.05, wing = Math.sin(t * 6 + i) > 0 ? 1 : -1;
+      ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+      ctx.fillRect(Math.round(x - 3), Math.round(y - wing), 2, 2);
+      ctx.fillRect(Math.round(x + 3), Math.round(y - wing), 2, 2);
+    }
+  }
+}
+
+// ---- animated views: one RAF loop redraws all attached canvases (bg cached, ~30fps) ----
+const _gviews = new Set();
+let _ganim = false, _glast = 0;
+function gardenViewAttach(canvas, getOpts) {
+  const v = { canvas, ctx: canvas.getContext('2d'), getOpts, bg: document.createElement('canvas'), key: '' };
+  _gviews.add(v);
+  if (!_ganim) { _ganim = true; requestAnimationFrame(_gloop); }
+  return v;
+}
+function gardenViewDetach(v) { _gviews.delete(v); }
+function _gloop(ts) {
+  requestAnimationFrame(_gloop);
+  if (ts - _glast < 33) return; // ~30fps
+  _glast = ts;
+  const t = ts / 1000;
+  for (const v of _gviews) { try { _gdraw(v, t); } catch (_) {} }
+}
+function _gdraw(v, t) {
+  const o = v.getOpts(); if (!o) return;
+  const { W, H, GY, S, spacing, clip, plants, scorch, hour, season } = o;
+  const cw = W * S, ch = H * S;
+  const key = `${season}:${Math.floor(hour)}:${W}:${H}:${S}`;
+  if (v.key !== key || v.bg.width !== cw) { v.bg.width = cw; v.bg.height = ch; drawSceneBg(v.bg.getContext('2d'), S, W, H, GY, hour, season); v.key = key; }
+  const ctx = v.ctx; ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(v.bg, 0, 0);
+  for (let i = 0; i < Math.min(scorch || 0, 6); i++) { ctx.fillStyle = season === 'winter' ? GC.snowD : GC.scorch; ctx.fillRect((8 + i * 7) * S, GY * S, 3 * S, 1 * S); }
+  const amp = season === 'monsoon' ? 1.5 : 1, x0 = 6;
+  for (let i = 0; i < plants.length; i++) {
+    const cx = x0 + i * spacing; if (clip && cx > W - 3) break;
+    const p = plants[i], sway = Math.round(Math.sin(t * 1.1 + i * 0.7) * amp);
+    drawPlant(windyBrush(ctx, S, cx, GY - 1, sway), p.species, plantMaturity(p), p.harm, season);
+  }
+  drawWeatherAnim(ctx, cw, Math.max(4, (GY - 1) * S), season, t);
+  drawWildlife(ctx, cw, GY * S, season, hour, t);
 }
 
 function stripWidthFor(plantCount, spacing) { return 6 + Math.max(1, plantCount) * spacing + 6; }

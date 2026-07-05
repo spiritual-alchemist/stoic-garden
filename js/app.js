@@ -16,6 +16,7 @@ const DETAIL = { H: 28, GY: 20, spacing: 16 };
 function init() {
   $('#epigraph').innerHTML = epigraphHtml();
   buildPlots();
+  gardenViewAttach($('#detailCanvas'), () => detailBed ? ({ W: detailW, H: DETAIL.H, GY: DETAIL.GY, S: detailS, spacing: DETAIL.spacing, clip: false, plants: STATE.gardens[detailBed].plants, scorch: STATE.gardens[detailBed].scorch, hour: nowHour(), season: currentSeason() }) : null);
   $('#dayPrev').addEventListener('click', () => { currentDay = addDays(currentDay, -1); renderDay(); });
   $('#dayNext').addEventListener('click', () => { if (currentDay < todayStr()) { currentDay = addDays(currentDay, 1); renderDay(); } });
   $('#addItem').addEventListener('click', () => openComposer(null));
@@ -63,15 +64,16 @@ function buildPlots() {
     plot.addEventListener('click', () => openDetail(v.key));
     wrap.appendChild(plot);
     PLOT_REFS[v.key] = { canvas: cv, name };
+    // the animation loop draws this plot live; skip while the detail panel covers the field
+    gardenViewAttach(cv, () => detailBed ? null : ({ W: FIELD.W, H: FIELD.H, GY: FIELD.GY, S: FIELD.S, spacing: FIELD.spacing, clip: true, plants: STATE.gardens[v.key].plants, scorch: STATE.gardens[v.key].scorch, hour: nowHour(), season: currentSeason() }));
   });
 }
 function renderField() {
-  const hour = nowHour(), season = currentSeason();
+  const season = currentSeason();
   const st = $('#seasonTag'); if (st) st.textContent = `this week · ${season}`;
   VIRTUES.forEach(v => {
-    const g = STATE.gardens[v.key], ref = PLOT_REFS[v.key]; if (!ref) return;
-    drawGardenStrip(ref.canvas.getContext('2d'), FIELD.S, { W: FIELD.W, H: FIELD.H, GY: FIELD.GY, plants: g.plants, scorch: g.scorch, hour, season, spacing: FIELD.spacing, clip: true });
-    const s = gardenStats(g);
+    const ref = PLOT_REFS[v.key]; if (!ref) return;
+    const s = gardenStats(STATE.gardens[v.key]);
     ref.name.textContent = v.label + (s.scars ? ` · ${s.scars} scar${s.scars > 1 ? 's' : ''}` : '');
   });
   const line = mirrorLine(STATE.gardens);
@@ -88,17 +90,17 @@ function openDetail(bed) {
   renderDetail();
 }
 function closeDetail() { $('#detail').classList.remove('open'); detailBed = null; }
-let detailCssW = 0;
+let detailCssW = 0, detailW = 40, detailS = 8;
 function renderDetail() {
-  const g = STATE.gardens[detailBed], hour = nowHour(), season = currentSeason();
+  const g = STATE.gardens[detailBed];
   const W = Math.max(40, stripWidthFor(g.plants.length, DETAIL.spacing));
   const effW = Math.min((window.innerWidth || 560) - 40, 1200); // fill the laptop
   const S = Math.max(7, Math.min(12, Math.floor(effW / (DETAIL.spacing * 4))));
   const cv = $('#detailCanvas');
+  detailW = W; detailS = S; detailCssW = W * S;
   cv.width = W * S; cv.height = DETAIL.H * S;
-  detailCssW = W * S;
   cv.style.width = detailCssW + 'px'; cv.style.height = 'auto';
-  drawGardenStrip(cv.getContext('2d'), S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, season, spacing: DETAIL.spacing, clip: false });
+  // the animation loop paints it (see the detail view attached in init)
   $('#detailStats').textContent = statLine(g);
   renderLedger();
   // measure after the panel has laid out, then park at the growing edge
