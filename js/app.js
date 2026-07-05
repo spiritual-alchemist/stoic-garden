@@ -11,8 +11,8 @@ const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
 const nowHour = () => new Date().getHours();
 
-const FIELD = { W: 56, H: 30, GY: 22, S: 4, spacing: 7 };
-const DETAIL = { H: 38, GY: 28, S: 6, spacing: 14 };
+const FIELD = { W: 60, H: 34, GY: 26, S: 4, spacing: 9 };
+const DETAIL = { H: 28, GY: 20, spacing: 16 };
 
 function init() {
   $('#epigraph').innerHTML = epigraphHtml();
@@ -93,15 +93,36 @@ let detailCssW = 0;
 function renderDetail() {
   const g = GARDENS[detailBed], hour = nowHour();
   const W = Math.max(40, stripWidthFor(g.plants.length, DETAIL.spacing));
+  const effW = Math.min((window.innerWidth || 560) - 28, 620);
+  const S = Math.max(7, Math.min(10, Math.floor(effW / (DETAIL.spacing * 4)))); // ~4 plants in view
   const cv = $('#detailCanvas');
-  cv.width = W * DETAIL.S; cv.height = DETAIL.H * DETAIL.S;
-  detailCssW = W * DETAIL.S;
+  cv.width = W * S; cv.height = DETAIL.H * S;
+  detailCssW = W * S;
   cv.style.width = detailCssW + 'px'; cv.style.height = 'auto';
-  drawGardenStrip(cv.getContext('2d'), DETAIL.S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, spacing: DETAIL.spacing, clip: false });
+  drawGardenStrip(cv.getContext('2d'), S, { W, H: DETAIL.H, GY: DETAIL.GY, plants: g.plants, scorch: g.scorch, hour, spacing: DETAIL.spacing, clip: false });
   const s = gardenSummary(g);
   $('#detailStats').textContent = g.plants.length ? `${g.plants.length} plants · depth ${s.depth}${s.scarred ? ` · ${s.scarred} scarred` : ''}` : 'bare ground — meet this virtue to plant it';
+  renderLedger();
   // measure after the panel has laid out, then park at the growing edge
   setTimeout(() => { const sc = $('#detailScroll'); if (sc && detailCssW > sc.clientWidth) sc.scrollLeft = sc.scrollWidth; updateDetailArrows(); }, 80);
+}
+// the grove's history: the events that grew or scarred it, newest first
+function renderLedger() {
+  const led = $('#detailLedger'); led.innerHTML = '';
+  const evs = STATE.items
+    .filter(i => i.pillar === detailBed && (i.outcome === 'met' || i.outcome === 'fell_short'))
+    .sort((a, b) => { const ka = a.resolvedDate || a.date, kb = b.resolvedDate || b.date; return ka === kb ? b.createdTs - a.createdTs : (ka < kb ? 1 : -1); });
+  if (!evs.length) { led.appendChild(el('p', 'led-empty', 'No history yet. When you meet this virtue, it takes root here.')); return; }
+  led.appendChild(el('h3', 'led-head', 'How this grove grew'));
+  evs.forEach(e => {
+    const row = el('div', 'led-row ' + (e.outcome === 'met' ? 'led-met' : 'led-short'));
+    row.appendChild(el('span', 'led-mark', e.outcome === 'met' ? '✦' : '✗'));
+    const body = el('div', 'led-body');
+    body.appendChild(el('span', 'led-title', e.title || WEIGHTS[e.weight].label));
+    body.appendChild(el('span', 'led-sub', `${WEIGHTS[e.weight].label.toLowerCase()} · ${humanDate(e.resolvedDate || e.date)}`));
+    row.appendChild(body);
+    led.appendChild(row);
+  });
 }
 function updateDetailArrows() {
   const sc = $('#detailScroll'); if (!sc) return;

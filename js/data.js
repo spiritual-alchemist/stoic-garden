@@ -16,12 +16,13 @@ const WEIGHT_ORDER = ['light', 'notable', 'pivotal'];
 const OUTCOMES = { open: { label: 'Open' }, met: { label: 'Met it' }, fell_short: { label: 'Fell short' } };
 
 // Plant species — data, not bespoke art. Each is a recipe the renderer reads.
+// Distinct SILHOUETTES (broad / cone / slender / weeping / blossom), not just colors.
 const SPECIES = [
-  { key: 'oak',    shape: 'round',   foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, evergreen: false },
-  { key: 'pine',   shape: 'pine',    foliage: { b: '#4e8a46', l: '#69a85e', d: '#356b2e' }, evergreen: true },
-  { key: 'cherry', shape: 'blossom', foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, blossom: '#f2a8c8', evergreen: false },
-  { key: 'birch',  shape: 'birch',   foliage: { b: '#7cb85a', l: '#9ccf6e', d: '#4f8a3c' }, evergreen: false },
-  { key: 'maple',  shape: 'round',   foliage: { b: '#68a84e', l: '#8cc466', d: '#3f7330' }, autumnal: true, evergreen: false },
+  { key: 'oak',    shape: 'broad',   foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' } },
+  { key: 'pine',   shape: 'cone',    foliage: { b: '#4e8a46', l: '#69a85e', d: '#2f5e2a' }, evergreen: true },
+  { key: 'cherry', shape: 'blossom', foliage: { b: '#6fae4e', l: '#8cc466', d: '#3f7330' }, blossom: '#f2a8c8' },
+  { key: 'birch',  shape: 'slender', foliage: { b: '#8cbf5e', l: '#a8d477', d: '#5f9440' } },
+  { key: 'willow', shape: 'willow',  foliage: { b: '#9cb85a', l: '#bcd47a', d: '#6f8a3e' } },
 ];
 const SPECIES_BY_KEY = Object.fromEntries(SPECIES.map(s => [s.key, s]));
 

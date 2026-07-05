@@ -34,7 +34,7 @@ function Elem(tag) {
   return e;
 }
 const IDS = ['epigraph', 'plots', 'mirrorLine', 'dayPrev', 'dayNext', 'dayLabel', 'items', 'addItem', 'export', 'import', 'importFile',
-  'detail', 'detailBack', 'detailPrev', 'detailNext', 'detailTitle', 'detailGreek', 'detailCanvas', 'detailScroll', 'detailStats',
+  'detail', 'detailBack', 'detailPrev', 'detailNext', 'detailTitle', 'detailGreek', 'detailCanvas', 'detailScroll', 'detailStats', 'detailLedger',
   'overlay', 'cClose', 'cHeading', 'cTitle', 'cDesc', 'cPillar', 'cWeight', 'cOutcome', 'cSubList', 'cSubInput', 'cSubAdd', 'cSave', 'cDelete'];
 const byId = {}; IDS.forEach(id => byId[id] = Elem(id === 'detailCanvas' ? 'canvas' : 'div'));
 function seg(parent, key, val, label) { const b = Elem('button'); b.dataset[key] = val; b.textContent = label; parent.appendChild(b); }

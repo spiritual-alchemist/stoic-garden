@@ -36,51 +36,87 @@ function drawSceneBg(ctx, S, W, H, GY, hour) {
   for (let x = 0; x < W; x++) if ((x * 5) % 4 === 0) P(x, GY - 1, GC.grass);
 }
 
-// ---- plant forms ----
-function trunk(b, h) { for (let i = 1; i <= h; i++) { b(0, -i, GC.trunk, 2, 1); b(0, -i, GC.trunkD, 1, 1); } }
-function roundCanopy(b, cy, rx, ry, fo, blossom) {
+// ---- plant forms: taller trunks + distinct silhouettes ----
+function trunk(b, h, col, colD) { for (let i = 1; i <= h; i++) { b(0, -i, col, 2, 1); b(0, -i, colD, 1, 1); } }
+function ellipseCanopy(b, cy, rx, ry, fo) {
   for (let dy = -ry - 1; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++)
     if (dx * dx / (rx * rx) + dy * dy / (ry * ry) <= 1) {
       const col = (dx < -1 && dy < 0) ? fo.l : ((dx > rx - 2 || dy > ry - 2) ? fo.d : fo.b);
       b(1 + dx, cy + dy, col);
     }
-  if (blossom) [[-2, -2], [2, -3], [0, -4], [3, 0], [-3, 1], [1, 2]].forEach(o => b(1 + o[0], cy + o[1], blossom));
 }
 function drawSprout(b, fo, blossom) { b(0, -1, GC.stem); b(0, -2, GC.stem); b(-1, -2, fo.b); b(1, -3, fo.l); b(0, -4, blossom || fo.l); }
-function drawRound(b, h, r, fo, blossom) { trunk(b, h); roundCanopy(b, -h - Math.max(1, r - 2), r, r - 1, fo, blossom); }
-function drawPine(b, h, fo) {
-  b(0, -1, GC.trunkD, 1, 1); b(0, -2, GC.trunkD, 1, 1);
-  const top = -(h + 2), maxW = 2 + Math.floor(h / 3);
-  for (let yy = -2; yy >= top; yy--) {
-    const frac = (yy + 2) / (top + 2), ww = Math.max(0, Math.round((1 - frac) * maxW));
+
+// broad, rounded — oak
+function drawBroad(b, m, fo) {
+  const Ht = 5 + Math.round(m * 0.7), trunkH = Math.max(2, Math.round(Ht * 0.5));
+  trunk(b, trunkH, GC.trunk, GC.trunkD);
+  const rx = 2 + Math.floor(m / 2.6), ry = 2 + Math.floor(m / 4);
+  ellipseCanopy(b, -trunkH - ry + 1, rx, ry, fo);
+}
+// tall narrow cone — pine (evergreen), with tier bands
+function drawCone(b, m, fo) {
+  const Ht = 5 + Math.round(m * 0.85), w = 2 + Math.floor(m / 2.6);
+  b(0, -1, GC.trunkD, 1, 1);
+  for (let i = 0; i <= Ht; i++) {
+    const yy = -(i + 1), frac = i / Ht, ww = Math.max(0, Math.round((1 - frac) * w));
+    if (i % 3 === 0) { b(-ww, yy, fo.d, 2 * ww + 1, 1); continue; }
     b(-ww, yy, fo.b, 2 * ww + 1, 1);
     if (ww > 0) { b(-ww, yy, fo.d); b(ww, yy, fo.d); }
   }
-  b(0, top, fo.l);
+  b(0, -(Ht + 1), fo.l);
 }
-function drawBirch(b, h, r, fo, blossom) {
-  for (let i = 1; i <= h; i++) { b(0, -i, '#d9d3c4', 1, 1); if (i % 3 === 0) b(0, -i, '#5e564a'); }
-  roundCanopy(b, -h - Math.max(1, r - 2), Math.max(2, r - 1), r, fo, blossom);
+// round canopy heavy with pink blossom — cherry
+function drawBlossom(b, m, fo, blossom) {
+  const Ht = 5 + Math.round(m * 0.7), trunkH = Math.max(2, Math.round(Ht * 0.5));
+  trunk(b, trunkH, GC.trunk, GC.trunkD);
+  const rx = 2 + Math.floor(m / 2.8), ry = 2 + Math.floor(m / 4), cy = -trunkH - ry + 1, light = '#ffd6e6';
+  for (let dy = -ry - 1; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++)
+    if (dx * dx / (rx * rx) + dy * dy / (ry * ry) <= 1) {
+      let col = ((dx + dy + 9) % 3 === 0) ? fo.d : blossom;
+      if (dx < -1 && dy < 0) col = light;
+      b(1 + dx, cy + dy, col);
+    }
 }
-function scarMark(b, h) { for (let i = 3; i <= Math.min(h - 1, 7); i++) b(0, -i, GC.scar); b(2, -h + 1, GC.deadD); }
+// tall, slender, white-barked — birch
+function drawSlender(b, m, fo) {
+  const Ht = 6 + Math.round(m * 0.6), trunkH = Math.max(3, Math.round(Ht * 0.55));
+  for (let i = 1; i <= trunkH; i++) { b(0, -i, '#dcd7c8', 2, 1); b(0, -i, '#c6c0af', 1, 1); if (i % 3 === 0) b(0, -i, '#5e564a', 1, 1); }
+  const rx = 1 + Math.floor(m / 4.5), ry = 2 + Math.floor(m / 3.5);
+  ellipseCanopy(b, -trunkH - ry + 2, Math.max(2, rx), ry, fo);
+}
+// drooping fronds — willow
+function drawWillow(b, m, fo) {
+  const Ht = 5 + Math.round(m * 0.65), trunkH = Math.max(2, Math.round(Ht * 0.42));
+  trunk(b, trunkH, GC.trunk, GC.trunkD);
+  const rx = 3 + Math.floor(m / 2.6), ry = 2 + Math.floor(m / 4), cy = -trunkH - ry;
+  ellipseCanopy(b, cy, rx, ry, fo);
+  const frondLen = 2 + Math.floor(m / 2);
+  for (let dx = -rx + 1; dx <= rx - 1; dx += 2) {
+    for (let k = 1; k <= frondLen; k++) { const y = cy + ry - 1 + k; if (y >= 0) break; b(1 + dx, y, (k % 2) ? fo.d : fo.b); }
+  }
+}
+function scarMark(b, m) { const h = Math.min(15, 4 + m); for (let i = 3; i <= Math.min(h - 1, 9); i++) b(0, -i, GC.scar); b(2, -h + 2, GC.deadD); }
 function drawScarred(b, m) {
-  const h = Math.min(12, 3 + m);
+  const h = Math.min(15, 4 + m);
   for (let i = 1; i <= h; i++) { b(0, -i, GC.dead, 2, 1); b(0, -i, GC.deadD, 1, 1); }
-  [[-1, -1], [-2, -2], [0, -2], [1, -3], [2, -2], [-2, -4], [1, -4], [0, -5]].forEach(o => b(o[0], -h + o[1], GC.deadD));
-  [[-2, 0], [2, 0], [-3, 0]].forEach(o => b(o[0], o[1], GC.scorch));
+  [[-1, -1], [-2, -2], [0, -2], [1, -3], [2, -2], [-2, -4], [1, -4], [0, -5], [-1, -6], [2, -6]].forEach(o => b(o[0], -h + o[1], GC.deadD));
+  [[-2, 0], [2, 0], [-3, 0], [3, 0]].forEach(o => b(o[0], o[1], GC.scorch));
 }
 
 function drawPlant(b, spKey, m, scarred, healed) {
   const sp = SPECIES_BY_KEY[spKey] || SPECIES[0];
-  const fo = sp.foliage, blossom = sp.blossom;
+  const fo = sp.foliage;
   if (scarred && !healed) return drawScarred(b, m);
-  const st = stageOf(m);
-  if (st === 'sprout') { drawSprout(b, fo, blossom); return; }
-  const h = Math.min(14, 2 + m), r = Math.min(6, 2 + Math.floor(m / 2.5));
-  if (sp.shape === 'pine') drawPine(b, h, fo);
-  else if (sp.shape === 'birch') drawBirch(b, h, r, fo, blossom);
-  else drawRound(b, h, r, fo, blossom);
-  if (scarred && healed) scarMark(b, h);
+  if (stageOf(m) === 'sprout') { drawSprout(b, fo, sp.blossom); return; }
+  switch (sp.shape) {
+    case 'cone': drawCone(b, m, fo); break;
+    case 'blossom': drawBlossom(b, m, fo, sp.blossom); break;
+    case 'slender': drawSlender(b, m, fo); break;
+    case 'willow': drawWillow(b, m, fo); break;
+    default: drawBroad(b, m, fo);
+  }
+  if (scarred && healed) scarMark(b, m);
 }
 
 // ---- a bed's garden into a canvas ----
