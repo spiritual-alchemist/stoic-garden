@@ -21,7 +21,8 @@ html, body { background: var(--bg); color: var(--ink); font-family: var(--sans);
 .plot { --accent: #888; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 6px 8px; cursor: pointer; text-align: center; transition: transform .08s ease; }
 .plot:active { transform: scale(.985); }
 .plot-canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 8px; }
-.plot-label { margin-top: 6px; }
+.plot-label { margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.plot-icon { display: inline-flex; line-height: 0; }
 .plot-name { font-size: 13px; font-weight: 500; color: var(--ink); }
 .mirror-line { font-family: var(--voice); font-size: 16px; line-height: 1.4; text-align: center; max-width: 720px; margin: 12px auto 0; color: var(--ink); }
 

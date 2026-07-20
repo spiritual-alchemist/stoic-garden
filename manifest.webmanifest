@@ -1,7 +1,7 @@
 {
-  "name": "The Stoic Garden",
+  "name": "The Garden",
   "short_name": "Garden",
-  "description": "A garden that grows from evidence, not effort. The mirror to your practice.",
+  "description": "A garden of the values you tend — it grows from what you meet, not from effort.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

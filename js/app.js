@@ -34,15 +34,28 @@ function init() {
   $('#cSubInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSubInput(); } });
   $('#cWeight').addEventListener('click', e => segPick(e, 'weight', '#cWeight'));
   $('#cOutcome').addEventListener('click', e => segPick(e, 'outcome', '#cOutcome'));
-  const sel = $('#cPillar'); VIRTUES.forEach(v => { const o = el('option'); o.value = v.key; o.textContent = v.label; sel.appendChild(o); });
+  const sel = $('#cPillar'); AREAS.forEach(v => { const o = el('option'); o.value = v.key; o.textContent = v.label; sel.appendChild(o); });
   renderAll();
   window.addEventListener('resize', () => $('#detailScroll') && updateDetailArrows());
 }
 
 function epigraphHtml() {
-  const list = (typeof EPIGRAPHS !== 'undefined' && EPIGRAPHS) ? EPIGRAPHS : [{ text: 'Waste no more time arguing what a good man should be. Be one.', by: 'Marcus Aurelius' }];
-  const ep = list[Math.floor(Date.now() / 86400000) % list.length];
-  return `“${ep.text}” <span class="by">— ${ep.by}</span>`;
+  const list = (typeof PROMPTS !== 'undefined' && PROMPTS.length) ? PROMPTS : ['Where did you grow, even a little?'];
+  return list[Math.floor(Date.now() / 86400000) % list.length];
+}
+
+// custom pixel-art value icons (7x7), drawn as tiny SVGs in the value's accent color
+const ICON_PIX = {
+  eye:     ['..###..', '.#...#.', '#.....#', '#..#..#', '#.....#', '.#...#.', '..###..'],
+  mallet:  ['.#####.', '.#####.', '...#...', '...#...', '...#...', '...#...', '...#...'],
+  compass: ['..###..', '.#...#.', '#..#..#', '#.###.#', '#..#..#', '.#...#.', '..###..'],
+  heart:   ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...', '.......'],
+};
+function iconSvg(name, color) {
+  const g = ICON_PIX[name]; if (!g) return '';
+  let r = '';
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) if (g[y][x] === '#') r += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+  return `<svg viewBox="0 0 7 7" width="15" height="15" fill="${color}" style="shape-rendering:crispEdges;vertical-align:-2px" aria-hidden="true">${r}</svg>`;
 }
 
 function renderAll() {
@@ -55,11 +68,14 @@ function renderAll() {
 const PLOT_REFS = {};
 function buildPlots() {
   const wrap = $('#plots'); wrap.innerHTML = '';
-  VIRTUES.forEach(v => {
+  AREAS.forEach(v => {
     const plot = el('button', 'plot'); plot.style.setProperty('--accent', v.accent);
     const cv = el('canvas', 'plot-canvas'); cv.width = FIELD.W * FIELD.S; cv.height = FIELD.H * FIELD.S;
     plot.appendChild(cv);
-    const lab = el('div', 'plot-label'); const name = el('span', 'plot-name', v.label); lab.appendChild(name);
+    const lab = el('div', 'plot-label');
+    const icon = el('span', 'plot-icon'); icon.innerHTML = iconSvg(v.icon, v.accent);
+    const name = el('span', 'plot-name', v.label);
+    lab.appendChild(icon); lab.appendChild(name);
     plot.appendChild(lab);
     plot.addEventListener('click', () => openDetail(v.key));
     wrap.appendChild(plot);
@@ -71,7 +87,7 @@ function buildPlots() {
 function renderField() {
   const season = currentSeason();
   const st = $('#seasonTag'); if (st) st.textContent = `this week · ${season}`;
-  VIRTUES.forEach(v => {
+  AREAS.forEach(v => {
     const ref = PLOT_REFS[v.key]; if (!ref) return;
     const s = gardenStats(STATE.gardens[v.key]);
     ref.name.textContent = v.label + (s.scars ? ` · ${s.scars} scar${s.scars > 1 ? 's' : ''}` : '');
@@ -83,9 +99,9 @@ function renderField() {
 
 // ---- the detail (one garden, pannable) ----
 function openDetail(bed) {
-  detailBed = bed; const v = VIRTUE_BY_KEY[bed];
-  $('#detailTitle').textContent = v.label; $('#detailTitle').style.color = v.accent;
-  $('#detailGreek').textContent = v.greek;
+  detailBed = bed; const v = AREA_BY_KEY[bed];
+  $('#detailTitle').innerHTML = iconSvg(v.icon, v.accent) + ' ' + v.label; $('#detailTitle').style.color = v.accent;
+  $('#detailGreek').textContent = v.sub;
   $('#detail').classList.add('open');
   renderDetail();
 }
@@ -109,7 +125,7 @@ function renderDetail() {
 // human-readable, no mystery numbers
 function statLine(g) {
   const s = gardenStats(g);
-  if (!s.trees && !s.scars) return 'bare ground — meet this virtue to plant it';
+  if (!s.trees && !s.scars) return 'bare ground — meet this value to plant it';
   const evs = STATE.items.filter(i => i.pillar === detailBed && (i.outcome === 'met' || i.outcome === 'fell_short'));
   const first = evs.length ? evs.map(e => e.resolvedDate || e.date).sort()[0] : null;
   const parts = [`${s.trees} ${s.trees === 1 ? 'tree' : 'trees'}`];
@@ -184,7 +200,7 @@ function outcomeToggle(it) {
   return g;
 }
 function itemCard(it) {
-  const v = VIRTUE_BY_KEY[it.pillar];
+  const v = AREA_BY_KEY[it.pillar];
   const card = el('div', 'item'); card.style.setProperty('--accent', v.accent);
   if (it.outcome === 'met') card.classList.add('is-met');
   if (it.outcome === 'fell_short') card.classList.add('is-short');
@@ -237,7 +253,7 @@ function openComposer(id) {
     composer.weight = it.weight; composer.outcome = it.outcome; composer.subtasks = (it.subtasks || []).map(s => ({ ...s }));
     $('#cHeading').textContent = 'Edit item'; $('#cDelete').style.display = '';
   } else {
-    $('#cTitle').value = ''; $('#cDesc').value = ''; $('#cPillar').value = VIRTUES[0].key;
+    $('#cTitle').value = ''; $('#cDesc').value = ''; $('#cPillar').value = AREAS[0].key;
     composer.weight = 'notable'; composer.outcome = 'open'; $('#cHeading').textContent = 'New item'; $('#cDelete').style.display = 'none';
   }
   const eff = id ? effectSummary(STATE.items.find(x => x.id === id)) : '';

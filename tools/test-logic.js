@@ -5,12 +5,12 @@ const path = require('path');
 const mem = {};
 global.localStorage = { getItem: k => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: k => { delete mem[k]; } };
 const src = ['data.js', 'store.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')).join('\n;\n');
-const m = new Function(src + ';return {applyEffect,undoEffect,plantMaturity,plantScarred,plantDead,harmThreshold,rebuildGardens,emptyGardens,gardenStats,addItem,setOutcome,updateItem,removeItem,todayStr,addDays,VIRTUES};')();
+const m = new Function(src + ';return {applyEffect,undoEffect,plantMaturity,plantScarred,plantDead,harmThreshold,rebuildGardens,emptyGardens,gardenStats,addItem,setOutcome,updateItem,removeItem,todayStr,addDays,AREAS};')();
 
 let pass = 0, fail = 0;
 const ok = (c, msg) => { if (c) pass++; else { fail++; console.log('  FAIL:', msg); } };
 const scripted = vals => { let i = 0; return () => vals[i++ % vals.length]; };
-const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'wisdom' }, o);
+const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'understanding' }, o);
 
 // apply: empty bed plants; existing bed can grow
 { const g = { plants: [], scorch: 0 }; const e = m.applyEffect(g, I({}), scripted([0.1])); ok(g.plants.length === 1 && g.plants[0].growth === 2 && e.kind === 'plant', 'met on empty -> plants a tree'); }
@@ -47,7 +47,7 @@ const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'wis
 {
   let seq = 0;
   const st = { version: 4, items: [], gardens: m.emptyGardens() };
-  const add = (w) => { seq++; m.addItem(st, { title: 't' + seq, pillar: 'wisdom', weight: w, outcome: 'met', date: m.addDays(m.todayStr(), -20 + seq) }); return st.items[st.items.length - 1]; };
+  const add = (w) => { seq++; m.addItem(st, { title: 't' + seq, pillar: 'understanding', weight: w, outcome: 'met', date: m.addDays(m.todayStr(), -20 + seq) }); return st.items[st.items.length - 1]; };
   const a = add('notable'), b = add('pivotal'), c = add('notable'), d = add('light'), e2 = add('pivotal');
   const others = () => JSON.stringify(st.items.filter(i => i.id !== b.id).map(i => i.effect));
   const before = others();
@@ -63,16 +63,16 @@ const I = (o) => Object.assign({ outcome: 'met', weight: 'notable', pillar: 'wis
 // ---- the die genuinely samples plant-vs-grow each completion ----
 {
   const g = { plants: [], scorch: 0 }; let planted = 0, grew = 0;
-  for (let i = 0; i < 50; i++) { const e = m.applyEffect(g, { id: 'z' + i, outcome: 'met', weight: 'notable', pillar: 'wisdom' }, Math.random); if (e.kind === 'plant') planted++; else grew++; }
+  for (let i = 0; i < 50; i++) { const e = m.applyEffect(g, { id: 'z' + i, outcome: 'met', weight: 'notable', pillar: 'understanding' }, Math.random); if (e.kind === 'plant') planted++; else grew++; }
   ok(planted > 0 && grew > 0, `die produces both outcomes over 50 rolls (${planted} planted, ${grew} grew)`);
 }
 
 // stats are human-countable
 {
   const st = { version: 4, items: [], gardens: m.emptyGardens() };
-  for (let i = 0; i < 4; i++) m.addItem(st, { title: 'x', pillar: 'courage', weight: 'notable', outcome: 'met', date: m.addDays(m.todayStr(), -i) });
-  const s = m.gardenStats(st.gardens.courage);
-  ok(s.trees >= 1 && s.scars === 0, `courage: ${s.trees} trees, ${s.scars} scars`);
+  for (let i = 0; i < 4; i++) m.addItem(st, { title: 'x', pillar: 'character', weight: 'notable', outcome: 'met', date: m.addDays(m.todayStr(), -i) });
+  const s = m.gardenStats(st.gardens.character);
+  ok(s.trees >= 1 && s.scars === 0, `character: ${s.trees} trees, ${s.scars} scars`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

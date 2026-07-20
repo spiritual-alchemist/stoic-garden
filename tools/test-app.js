@@ -62,31 +62,31 @@ try {
   ok(byId.plots.children.length === 4, 'field renders 4 plots');
   ok(byId.items.children.length === 1 && byId.items.children[0].classList.contains('items-empty'), 'day starts empty');
 
-  // add an OPEN courage pivotal item -> no plant yet
+  // add an OPEN character pivotal item -> no plant yet
   byId.addItem.click();
   byId.cTitle.value = 'Finish the hard PR';
-  byId.cPillar.value = 'courage';
+  byId.cPillar.value = 'character';
   byId.cWeight.dispatch('click', { target: byId.cWeight.children[2] });
   byId.cSave.click();
-  ok(JSON.parse(mem['stoic-garden-v4']).items.length === 1, 'item saved');
-  ok(G().courage.plants.length === 0, 'open item plants nothing');
+  ok(JSON.parse(mem['garden-v5']).items.length === 1, 'item saved');
+  ok(G().character.plants.length === 0, 'open item plants nothing');
 
   // mark met via the compact toggle -> a plant appears
   let card = byId.items.children.find(c => c.classList.contains('item'));
   card.querySelectorAll('.otog').find(b => b.classList.contains('o-met')).click();
-  ok(G().courage.plants.length === 1, 'marking met plants one thing in courage');
+  ok(G().character.plants.length === 1, 'marking met plants one thing in character');
 
   // flip to fell short -> plant gone, and a fell-short on an otherwise-empty bed scorches (reversible replay)
   card = byId.items.children.find(c => c.classList.contains('item'));
   card.querySelectorAll('.otog').find(b => b.classList.contains('o-fell_short')).click();
-  ok(G().courage.plants.length === 0 && G().courage.scorch === 1, 'flipping to fell short un-plants and scorches (replay is reversible)');
+  ok(G().character.plants.length === 0 && G().character.scorch === 1, 'flipping to fell short un-plants and scorches (replay is reversible)');
 
   // flip back to met -> plant returns, scorch gone
   card = byId.items.children.find(c => c.classList.contains('item'));
   card.querySelectorAll('.otog').find(b => b.classList.contains('o-met')).click();
-  ok(G().courage.plants.length === 1 && G().courage.scorch === 0, 'flipping back to met restores the plant');
+  ok(G().character.plants.length === 1 && G().character.scorch === 0, 'flipping back to met restores the plant');
 
-  // open the courage plot -> detail view renders without error
+  // open the character plot -> detail view renders without error
   byId.plots.children[2].click();
   ok(byId.detail.classList.contains('open'), 'tapping a plot opens the detail garden');
   ok(/tree|bare/.test(byId.detailStats._text), 'detail shows garden stats: "' + byId.detailStats._text + '"');
@@ -108,7 +108,7 @@ try {
   // delete via editor
   card = byId.items.children.find(c => c.classList.contains('item'));
   card.click(); byId.cDelete.click();
-  ok(JSON.parse(mem['stoic-garden-v4']).items.length === 0 && G().courage.plants.length === 0, 'delete removes item and its plant');
+  ok(JSON.parse(mem['garden-v5']).items.length === 0 && G().character.plants.length === 0, 'delete removes item and its plant');
 } catch (e) {
   fail++; console.log('  THREW:', e.message, '\n', (e.stack || '').split('\n').slice(1, 5).join('\n'));
 }

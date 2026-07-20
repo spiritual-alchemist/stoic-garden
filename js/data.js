@@ -3,13 +3,14 @@
 // and applies the new one. Trees are reference-counted, so undo is local and lossless —
 // editing one task never disturbs the rest of the forest.
 
-const VIRTUES = [
-  { key: 'wisdom',     label: 'Wisdom',     greek: 'sophia',     accent: '#8a6fd6' },
-  { key: 'justice',    label: 'Justice',    greek: 'dikaiosyne', accent: '#e0a52e' },
-  { key: 'courage',    label: 'Courage',    greek: 'andreia',    accent: '#d1503a' },
-  { key: 'temperance', label: 'Temperance', greek: 'sophrosyne', accent: '#3fa0a8' },
+// The values you tend. Each is a bed in the garden — labels/colors/icons are data.
+const AREAS = [
+  { key: 'understanding', label: 'Understanding', icon: 'eye',     sub: 'Seeing more clearly',                  accent: '#6d8fd6' },
+  { key: 'competence',    label: 'Competence',    icon: 'mallet',  sub: 'Developing and exercising abilities',  accent: '#e0a52e' },
+  { key: 'character',     label: 'Character',      icon: 'compass', sub: 'Acting well',                          accent: '#d1503a' },
+  { key: 'health',        label: 'Health',         icon: 'heart',   sub: 'Caring for the body',                  accent: '#5aa04a' },
 ];
-const VIRTUE_BY_KEY = Object.fromEntries(VIRTUES.map(v => [v.key, v]));
+const AREA_BY_KEY = Object.fromEntries(AREAS.map(v => [v.key, v]));
 
 const WEIGHTS = { light: { value: 1, label: 'Light' }, notable: { value: 2, label: 'Notable' }, pivotal: { value: 3, label: 'Pivotal' } };
 const WEIGHT_ORDER = ['light', 'notable', 'pivotal'];
@@ -84,7 +85,7 @@ function undoEffect(garden, eff) {
   if (p.refs <= 0) garden.plants = garden.plants.filter(x => x.id !== p.id);
 }
 
-function emptyGardens() { const g = {}; for (const v of VIRTUES) g[v.key] = { plants: [], scorch: 0 }; return g; }
+function emptyGardens() { const g = {}; for (const v of AREAS) g[v.key] = { plants: [], scorch: 0 }; return g; }
 function completedInOrder(items) {
   return items.filter(i => i.outcome === 'met' || i.outcome === 'fell_short').slice().sort((a, b) => {
     const ka = a.resolvedDate || a.date, kb = b.resolvedDate || b.date;
@@ -97,7 +98,7 @@ function completedInOrder(items) {
 function rebuildGardens(items) {
   const gardens = emptyGardens();
   for (const it of items) it.effect = null;
-  for (const it of completedInOrder(items)) it.effect = applyEffect(gardens[it.pillar], it, Math.random);
+  for (const it of completedInOrder(items)) { const g = gardens[it.pillar]; it.effect = g ? applyEffect(g, it, Math.random) : null; }
   return gardens;
 }
 
@@ -109,7 +110,7 @@ function gardenStats(garden) {
   return { trees, scars };
 }
 function mirrorLine(gardens) {
-  const rows = VIRTUES.map(v => ({ label: v.label, depth: livingDepth(gardens[v.key]) }));
+  const rows = AREAS.map(v => ({ label: v.label, depth: livingDepth(gardens[v.key]) }));
   const total = rows.reduce((s, r) => s + r.depth, 0);
   if (total < 3) return null;
   const sorted = rows.slice().sort((a, b) => b.depth - a.depth);
@@ -118,17 +119,15 @@ function mirrorLine(gardens) {
   return `${top.label} is your deepest grove. ${bottom.label} is still bare ground.`;
 }
 
-const EPIGRAPHS = [
-  { text: 'You have power over your mind — not outside events. Realize this, and you will find strength.', by: 'Marcus Aurelius' },
-  { text: 'No man is free who is not master of himself.', by: 'Epictetus' },
-  { text: 'We suffer more often in imagination than in reality.', by: 'Seneca' },
-  { text: 'Waste no more time arguing what a good man should be. Be one.', by: 'Marcus Aurelius' },
-  { text: 'First say to yourself what you would be; then do what you have to do.', by: 'Epictetus' },
-  { text: 'It is not that we have a short time to live, but that we waste much of it.', by: 'Seneca' },
-  { text: 'The happiness of your life depends upon the quality of your thoughts.', by: 'Marcus Aurelius' },
-  { text: 'Difficulties show a person’s character. When a hard test comes, know it is your training.', by: 'Epictetus' },
-  { text: 'The soul becomes dyed with the color of its thoughts.', by: 'Marcus Aurelius' },
-  { text: 'Confine yourself to the present.', by: 'Marcus Aurelius' },
+// a quiet daily prompt, rotated by day — the ritual voice, not attributed quotes
+const PROMPTS = [
+  'Where did you see more clearly today?',
+  'What can you do now that you couldn’t before?',
+  'Where did your character show?',
+  'What did you do for your body?',
+  'What did today teach you?',
+  'Where did you grow, even a little?',
+  'What did you meet well — and where did you fall short?',
 ];
 
 // ---- seasons: a new one every week, straight off the clock (no bookkeeping) ----

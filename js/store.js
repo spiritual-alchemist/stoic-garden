@@ -1,21 +1,17 @@
 // Local-first storage. The garden is STORED alongside the item log. Every change to a
 // task reconciles the garden: undo the task's old effect, apply its new one. Nothing else.
 
-const STORE_KEY = 'stoic-garden-v4';
-const STORE_KEY_V3 = 'stoic-garden-v3';
-const STORE_KEY_V2 = 'stoic-garden-v2';
+// New key: the old Stoic-virtue data doesn't map to these values, so it starts fresh.
+const STORE_KEY = 'garden-v5';
 
 function loadState() {
   try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); return ensure(s); } } catch (_) {}
-  // migrate older item logs forward and build the garden from them
-  for (const k of [STORE_KEY_V3, STORE_KEY_V2]) {
-    try { const raw = localStorage.getItem(k); if (raw) { const old = JSON.parse(raw); const s = ensure({ version: 4, items: old.items || [] }); saveState(s); return s; } } catch (_) {}
-  }
-  return { version: 4, items: [], gardens: emptyGardens() };
+  return { version: 5, items: [], gardens: emptyGardens() };
 }
 function ensure(s) {
   if (!s.items) s.items = [];
-  if (!s.gardens) s.gardens = rebuildGardens(s.items); // (re)build if missing
+  if (!s.gardens) s.gardens = rebuildGardens(s.items);
+  for (const a of AREAS) if (!s.gardens[a.key]) s.gardens[a.key] = { plants: [], scorch: 0 }; // fill any missing value
   return s;
 }
 function saveState(state) { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -35,7 +31,7 @@ function newItem(f) {
   const now = Date.now(), outcome = f.outcome || 'open';
   return {
     id: makeId(), date: f.date || todayStr(), title: (f.title || '').trim(), desc: (f.desc || '').trim(),
-    pillar: f.pillar || VIRTUES[0].key, weight: f.weight || 'notable', outcome,
+    pillar: f.pillar || AREAS[0].key, weight: f.weight || 'notable', outcome,
     subtasks: f.subtasks || [], resolvedDate: outcome === 'open' ? null : (f.date || todayStr()),
     createdTs: now, updatedTs: now, effect: null,
   };
@@ -81,7 +77,7 @@ function itemsOn(state, dateStr) { return state.items.filter(i => i.date === dat
 function exportState(state) {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = `stoic-garden-${todayStr()}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  a.href = url; a.download = `garden-${todayStr()}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 function importState(file) {
   return new Promise((resolve, reject) => {
